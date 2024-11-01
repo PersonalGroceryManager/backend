@@ -1,0 +1,45 @@
+name: CI
+
+# Triggers whenever a new commit is pushed or a new pull request
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches: 
+      - main
+
+jobs:
+  test:
+    strategy:
+      # So that fails do not cascade
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: [3.7, 3.8, 3.9, 3.10, 3.11, 3.12]
+
+    name: Route Test
+
+    # Use operating systems defined in matrix
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+    
+      - name: Set up Python environment
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ matrix.python-version}}
+
+      - name: Install dependencies
+        # Multi line string - executes together
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests
+        # Define environmental variables from repo secrets
+        env:
+            DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: pytest tests/
