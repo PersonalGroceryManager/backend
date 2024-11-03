@@ -43,7 +43,7 @@ jobs:
       - name: Run tests
         # Define environmental variables from repo secrets
         env:
-            MODE: ${{ vars.MODE }}
+            MODE: testing
             DATABASE_URL_TEST: ${{ secrets.DATABASE_URL_TEST }}
 
         run: pytest tests/
