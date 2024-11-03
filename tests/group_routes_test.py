@@ -1,17 +1,5 @@
 # tests/routes_test.py
 
-import pytest
-from flask import Flask
-from src.run import create_app
-
-
-@pytest.fixture
-def client():
-    app = create_app()
-    app.config['TESTING'] = True
-    with app.test_client() as client:
-        yield client  # This is where the testing happens
-
 
 def test_get_groups(client):
     """Test getting all groups."""
@@ -46,4 +34,4 @@ def test_create_group_without_name(client):
     assert response.status_code == 400
     assert 'Group name is required!' in response.json['message']
 
-# Additional tests for other routes...
+
