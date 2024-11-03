@@ -84,7 +84,7 @@ def get_user_email(user_id:int):
     
 
 @user_blueprint.route("/get/groups/<int:user_id>", methods=['GET'])
-def get_groups_jonined_by_user(user_id: int):
+def get_groups_joined_by_user(user_id: int):
     """
     Get the groups joined by the user.
     """
@@ -120,33 +120,33 @@ def register_user():
     }
     """
     try:
-        
+
         data = request.json
-        
+
         username = data.get('username')
         password = data.get('password')
         email = data.get('email')
-        
+
         with SessionLocal() as session:
             # Checks if the username exists - fail if exists
             user_exists = session.query(exists().where(User.username == username)).scalar()
             if user_exists:
                 return jsonify({"status": "failed", "message": "User already exists!"}), 400
-            
+
             # Hash the password before storing in database
             hashed_password = auth.hash_password(password)
-            
+
             # Create a new_user
             new_user = User(username=username, hashed_password=hashed_password, email=email)
             session.add(new_user)
 
         return jsonify({"status": "success"}), 200
-    
+
     except Exception as e:
         return jsonify({"status": "failed", "message": str(e)}), 400
-    
 
-@user_blueprint.route("/delete", methods=['POST'])
+
+@user_blueprint.route("/delete", methods=['DELETE'])
 def delete_user():
     """
     Delete a user from the database.
