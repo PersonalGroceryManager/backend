@@ -12,14 +12,14 @@ from flask import Flask
 
 # Routes
 from src.routes.group_routes import groups_blueprint
-from src.routes.user_routes import user_blueprint
+from src.routes.user_routes import users_blueprint
 from src.routes.receipt_routes import receipt_blueprint
 
 def create_app():
     app = Flask(__name__)
     app.register_blueprint(groups_blueprint,  url_prefix='/groups')
-    app.register_blueprint(user_blueprint,    url_prefix='/user')
-    app.register_blueprint(receipt_blueprint, url_prefix='/receipt')
+    app.register_blueprint(users_blueprint,   url_prefix='/users')
+    app.register_blueprint(receipt_blueprint, url_prefix='/receipts')
 
     app.secret_key = os.urandom(24)  # Generate a 24-byte random key
 
