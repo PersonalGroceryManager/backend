@@ -1,6 +1,7 @@
 # Standard Imports
 from datetime import datetime as dt
 from typing import Tuple, Dict, List
+from werkzeug.utils import secure_filename
 
 # Third-Party Imports
 from sqlalchemy import insert, update, desc
@@ -11,16 +12,20 @@ from src.utils.database import SessionLocal
 from src.utils.models import Group, Receipt, Item, UserItems, UserSpending
 from src.receipt_reader.SainsburysReceipt import SainsburysReceipt
 from src.utils.app_logger import logger
+from src.routes.group_routes import groups_blueprint
 
-receipt_blueprint = Blueprint('receipt', __name__)
+receipt_blueprint = Blueprint('receipts', __name__)
 
-@receipt_blueprint.route('/get-receipt-list/<int:group_id>', methods=['GET'])
+# Nest group-related operations under 'groups/<group_id>/receipts'
+@groups_blueprint.route('<int:group_id>/receipts', methods=['GET'])
 def get_receipts_in_group(group_id: int):
     
     try:
         with SessionLocal() as session:
             logger.debug(f"Fetching receipt in group ID: {group_id}")
-            receipts = session.query(Receipt).join(Group).filter(Group.group_id == group_id).order_by(desc(Receipt.slot_time)).all()
+            receipts = session.query(Receipt).join(Group)\
+                .filter(Group.group_id == group_id)\
+                    .order_by(desc(Receipt.slot_time)).all()
 
             results = {
                 "receipts": [
@@ -44,22 +49,34 @@ def get_receipts_in_group(group_id: int):
         session.close()
 
 
-@receipt_blueprint.route('/add', methods=['POST'])
-def add_receipt_to_group():
+@groups_blueprint.route('/<int:group_id>/receipts', methods=['POST'])
+def add_receipt_to_group(group_id: int):
     
     try:
-        group_id = request.form.get('group_id')
-        file = request.files["file"]
         
-        # File Validation
-        if file.filename == '':
+        # Validate that group exists
+        
+        # Extract file object
+        file = request.files.get("file")
+        
+        # File Validation - if invalid file type, raise 400 Bad Request
+        if not file or file.filename == '':
             logger.error("Invalid file.")
-            return jsonify({"error": "No selected file"})
-
+            return jsonify({"error": "Bad Request",
+                            "message": "No file provided"}), 400
+        
+        # Additional verification to ensure it is a .pdf file
+        if not file.filename.endswith('.pdf'):
+            return jsonify({"error": "Bad Request",
+                            "message": "Expected PDF file"}), 400
+                            
+        # Secure filename to remove dangerous characters
+        filename = secure_filename(file.filename)
+        logger.debug(f"Received valid receipt with name: {filename}")
+        
         # Not to be confused - receipt is the SainsburysReceipt object defined
         # in receipt_reader folder, whereas receipt_for_db is a database entry
         receipt = SainsburysReceipt(file)
-        logger.debug("Received valid receipt.")
         
         # Add receipt to database
         receipt_for_db = Receipt(order_id=receipt.order_id,
@@ -78,8 +95,9 @@ def add_receipt_to_group():
             # uploaded receipt to be referenced by items
             session.add(receipt_for_db)
             session.flush()
-            added_receipt = session.query(Receipt).filter(Receipt.order_id==receipt.order_id, 
-                                                          Receipt.group_id==group_id).first()
+            added_receipt = session.query(Receipt)\
+                .filter(Receipt.order_id==receipt.order_id, 
+                        Receipt.group_id==group_id).first()
             
             # Add items in receipt to database
             for item in receipt.item_list:
@@ -93,37 +111,48 @@ def add_receipt_to_group():
             session.commit()
         
         logger.debug("Receipt successfully added to group.")
-        return jsonify({"status": "success"}), 200
+        return jsonify({"message": "Receipt successfully added to group"}), 201
         
     except Exception as e:
         logger.error(str(e))
-        return jsonify({"status": "failed", "message": str(e)}), 400
+        return jsonify({"error": "Internal Server Error",
+                        "message": str(e)}), 500
 
 
-@receipt_blueprint.route('/get/<int:receipt_id>', methods=['GET'])
+@receipt_blueprint.route('/<int:receipt_id>/items', methods=['GET'])
 def get_receipt_items(receipt_id: int):
         
     try:
         logger.debug(f"Fetching item data for receipt ID: {receipt_id}")
+        
         with SessionLocal() as session:
-            items: List[Item] = session.query(Item).filter(Item.receipt_id==receipt_id).all()
             
-            results = {
-                "items":
-                    [
-                        {"item_id": item.item_id,
+            # Query for all items pertaining to the receipt ID
+            items: List[Item] = session.query(Item)\
+                .filter(Item.receipt_id==receipt_id).all()
+                
+            # Raise 404 Not Found error if no items are found
+            if not items:
+                return jsonify({
+                    "error": "Not Found",
+                    "message": "No items found associated with this receipt"
+                }), 404
+            
+            results = [{"item_id": item.item_id,
                         "item_name": item.item_name,
                         "quantity": item.quantity,
                         "weight": item.weight,
                         "price": item.price}
-                    for item in items]
-            }
+                       for item in items]
+
             logger.debug(f"Gathered receipt data to send.")
-        return jsonify(results), 200
+
+        return jsonify({"items": results}), 200
 
     except Exception as e:
         logger.error(str(e))
-        return jsonify({"status": "failed", "message": str(e)}), 400
+        return jsonify({"error": "Internal Server Error", 
+                        "message": str(e)}), 500
     
 
 @receipt_blueprint.route('<int:receipt_id>/add-user/<int:user_id>', methods=['POST'])    
@@ -136,14 +165,16 @@ def create_user_item_associations(receipt_id: int, user_id: int):
         if not isinstance(receipt_id, int):
             msg = f"Receipt ID is not of type {int} with its content being {receipt_id}"
             logger.error(msg)
-            return jsonify({"status": "failed", "message": msg})
+            return jsonify({"status": "failed", "message": msg}), 500
         if not isinstance(user_id, int):
             msg = f"User ID is not of type {int} with its content being {user_id}"
-            return jsonify({"status": "failed", "message": msg})
+            return jsonify({"status": "failed", "message": msg}), 500
         
         # Create a new entry in the database
         with SessionLocal() as session:
-            items: List[Item] = session.query(Item).filter(Item.receipt_id==receipt_id).all()
+            items: List[Item] = session.query(Item)\
+                .filter(Item.receipt_id==receipt_id).all()
+            
             for item in items:
                 stmt = insert(UserItems).values(
                     user_id=user_id,
