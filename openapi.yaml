@@ -6,7 +6,7 @@ info:
   description: OpenAPI document of Grocery Manager backend routes
 
 servers:
-  - url: 
+  - url: https://grocery-manager-qsr9.onrender.com
     description: Main production server 
 
 # Paths/Routes ================================================================
@@ -217,7 +217,7 @@ paths:
       tags:
         - Users
       security:
-        - bearerAuth: []  # This refers to the JWT-based security
+        - bearerAuth: []
       parameters:
         - in: query
           name: user_id
@@ -792,6 +792,7 @@ components:
                 type: string
                 example: 'Resource identified cannot be found in request'
     NotFoundError:
+      description: Not found - the requested resource does not exist
       content:
         application/json:
           schema:
