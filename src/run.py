@@ -11,11 +11,10 @@ from src import create_app
 # Load environment variables
 load_dotenv()
 
-if __name__ == '__main__':
-    app = create_app()
-    
-    mode = os.getenv('MODE', 'development')
+app = create_app()
 
-    # Run in debug mode for non-production environment
-    if mode != 'production':
-        app.run(debug=True)
+mode = os.getenv('MODE', 'development')
+
+# Run in debug mode for non-production environment
+if mode != 'production':
+    app.run(debug=True)
