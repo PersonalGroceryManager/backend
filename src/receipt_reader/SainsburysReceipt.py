@@ -89,6 +89,12 @@ class SainsburysReceipt():
                 payment_card = int(self._content[idx+1][0:4])
                 break  # Break here since no information is needed after
             
+            # For newer receipts, the card number appear on lines differently
+            elif line.startswith("ending in"):
+                # Same line, starting from 10th to 14th character
+                payment_card = int(self._content[idx][10:14])
+                break  # Break here since no information is needed after
+            
 
         # Convert the date string into a datetime object.
         # ----------

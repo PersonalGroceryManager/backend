@@ -19,7 +19,18 @@ from dotenv import load_dotenv
 from src.utils.models import Base
 
 load_dotenv()
-DATABASE_URL = os.getenv('DATABASE_URL')
+
+# Set database URL based on MODE environmental variable
+mode = os.getenv('MODE', 'development')  # default to 'development'
+if mode == 'development':
+    DATABASE_URL = os.getenv('DATABASE_URL_DEV')
+elif mode == 'testing':
+    DATABASE_URL = os.getenv('DATABASE_URL_TEST')
+elif mode == 'production':
+    DATABASE_URL = os.getenv('DATABASE_URL_PROD')
+else:
+    raise ValueError(f"Invalid MODE: {mode}")
+
 
 # Create Engine
 engine = create_engine(DATABASE_URL)
