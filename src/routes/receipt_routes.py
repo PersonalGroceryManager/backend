@@ -4,12 +4,12 @@ from typing import Tuple, Dict, List
 from werkzeug.utils import secure_filename
 
 # Third-Party Imports
-from sqlalchemy import insert, update, desc
+from sqlalchemy import select, insert, update, desc
 from flask import Blueprint, request, jsonify
 
 # Project-Specific Imports
 from src.utils.database import SessionLocal
-from src.utils.models import Group, Receipt, Item, UserItems, UserSpending
+from src.utils.models import User, Group, Receipt, Item, UserItems, UserSpending
 from src.receipt_reader.SainsburysReceipt import SainsburysReceipt
 from src.utils.app_logger import logger
 from src.routes.group_routes import groups_blueprint
@@ -55,6 +55,14 @@ def add_receipt_to_group(group_id: int):
     try:
         
         # Validate that group exists
+        with SessionLocal() as session:
+            group = session.scalar(select(Group)\
+                .where(Group.group_id == group_id))
+            
+            # Return 404 Not Found error if group with this ID does not exist
+            if not group:
+                return jsonify({"error": "Not Found",
+                               "message": "No group with this ID found"}), 404
         
         # Extract file object
         file = request.files.get("file")
@@ -155,23 +163,46 @@ def get_receipt_items(receipt_id: int):
                         "message": str(e)}), 500
     
 
-@receipt_blueprint.route('<int:receipt_id>/add-user/<int:user_id>', methods=['POST'])    
+@receipt_blueprint.route('<int:receipt_id>/users/<int:user_id>', 
+                         methods=['POST'])
 def create_user_item_associations(receipt_id: int, user_id: int):
     """
     Create new entry in the user quantity table given the user and receipt ID.
     """
     try:
-        # Data validation
+        # Data type validation
         if not isinstance(receipt_id, int):
-            msg = f"Receipt ID is not of type {int} with its content being {receipt_id}"
+            msg = f"Receipt ID is not of type {int} with \
+                its content being {receipt_id}"
             logger.error(msg)
-            return jsonify({"status": "failed", "message": msg}), 500
+            return jsonify({"error": "Internal Server Error", 
+                            "message": msg}), 500
         if not isinstance(user_id, int):
-            msg = f"User ID is not of type {int} with its content being {user_id}"
-            return jsonify({"status": "failed", "message": msg}), 500
-        
-        # Create a new entry in the database
+            msg = f"User ID is not of type {int} with \
+                its content being {user_id}"
+            return jsonify({"error": "Internal Server Error", 
+                            "message": msg}), 500
+            
+        # Verify that user exists
         with SessionLocal() as session:
+            user = session.scalar(select(User).where(User.user_id == user_id))
+            if not user:
+                return jsonify({"error": "Not Found",
+                                "message": "No user with this ID exists"}),\
+                                    404
+        
+        # Verify that receipt exists
+        with SessionLocal() as session:
+            receipt = session.execute(select(Receipt.receipt_id)
+                                      .where(Receipt.receipt_id == receipt_id))
+            if not receipt:
+                return jsonify({"error": "Not Found",
+                                "message": "No receipt with this ID exists"}),\
+                                    404
+        
+        with SessionLocal() as session:
+            
+            # Create new entries to link the new user to all items in receipt
             items: List[Item] = session.query(Item)\
                 .filter(Item.receipt_id==receipt_id).all()
             
@@ -179,20 +210,20 @@ def create_user_item_associations(receipt_id: int, user_id: int):
                 stmt = insert(UserItems).values(
                     user_id=user_id,
                     item_id=item.item_id,
-                    unit=0,  # Default to zero
+                    unit=0,
                 )
                 session.execute(stmt)
             session.commit()
             logger.info(f"Added user ID {user_id} to receipt ID {receipt_id}")
-            
-        return jsonify({"status": "success"}), 200
+
+        return jsonify({"message": "User added to this receipt"}), 201
     
     except Exception as e:
         logger.error(e)
-        return jsonify({"status": "failed", "message": e}), 400
+        return jsonify({"error": "Internal Server Error", "message": e}), 500
 
 
-@receipt_blueprint.route('/update/user-items', methods=['PUT'])
+@receipt_blueprint.route('/user-items', methods=['PUT'])
 def update_user_item_associations():
     """
     Update a set of existing rows corresponding to the combination of user
@@ -210,7 +241,8 @@ def update_user_item_associations():
         if not isinstance(data, list):
             msg = f"Data is not of type list, but of type {type(data)}, with the content being {data}"
             logger.error(msg)
-            return jsonify({"status": "failed", "message": msg})
+            return jsonify({"error": "Internal Server Error", 
+                            "message": msg}), 500
         
         # Validate each entry in the dictionary
         for obj in data:
@@ -219,7 +251,8 @@ def update_user_item_associations():
             if not isinstance(obj, dict):
                 msg = f"Content within data is not of type dict, but of type {type(data)}, with the content being {data}"
                 logger.error(msg)
-                return jsonify({"status": "failed", "message": msg})
+                return jsonify({"error": "Internal Server Error", 
+                                "message": msg}), 500
             
             # Ensure neccessary fields are present
             required_fields = ['user_id', 'item_id', 'unit']
@@ -227,28 +260,53 @@ def update_user_item_associations():
                 if field not in obj:
                     msg = f"Missing required field: {field}"
                     logger.error(msg)
-                    return jsonify({"status": "failed", "message": msg}), 400
-                
+                    return jsonify({"error": "Internal Server Error", 
+                                    "message": msg}), 500   
+             
             # Ensure field types are correct
             if not isinstance(obj["user_id"], int):
                 msg = f"user_id must be an integer. Received {obj['user_id']}"
                 logger.error(msg)
-                return jsonify({"status": "failed", "message": msg}), 400
-
+                return jsonify({"error": "Internal Server Error", 
+                                "message": msg}), 500
+                
             if not isinstance(obj["item_id"], int):
                 msg = f"receipt_id must be an integer. Received {obj['receipt_id']}"
                 logger.error(msg)
-                return jsonify({"status": "failed", "message": msg}), 400
-
+                return jsonify({"error": "Internal Server Error", 
+                                "message": msg}), 500
+                
             if not isinstance(obj["unit"], (float, int)) or obj["unit"] < 0:
                 msg = f"cost must be a positive number. Received {obj['unit']}"
                 logger.error(msg)
-                return jsonify({"status": "failed", "message": msg}), 400
+                return jsonify({"error": "Internal Server Error", 
+                                "message": msg}), 500
             
         # Create a new entry in the database
         with SessionLocal() as session:
                 
             for entry in data:
+                
+                user_id, item_id = entry["user_id"], entry["item_id"]
+                
+                # Ensure user with this user ID exists
+                user = session.execute(select(User)\
+                    .where(User.user_id == user_id))
+                if not user:
+                    return jsonify({
+                        "error": "Not Found",
+                        "message": "No user with this user_id found"
+                    }), 404
+                    
+                # Ensure item with this item ID exists
+                item = session.execute(select(UserItems)\
+                    .where(UserItems.c.item_id == item_id))
+                if not item:
+                    return jsonify({
+                        "error": "Not Found",
+                        "message": "No user with this item_id found"
+                    }), 404
+                
                 stmt = update(UserItems).where(
                     (UserItems.c.user_id==entry["user_id"]) &
                     (UserItems.c.item_id==entry["item_id"])
@@ -257,18 +315,30 @@ def update_user_item_associations():
                 session.execute(stmt)
             session.commit()
 
-        return jsonify({"status": "success"}), 200
+        return jsonify({"message": "Updated successfully"}), 200
 
     except Exception as e:
         logger.error(str(e))
-        return jsonify({"status": "failed", "message": str(e)}), 400
+        return jsonify({"error": "Internal Server Error", 
+                        "message": str(e)}), 500
     
 
-@receipt_blueprint.route('/get/user-items/<int:receipt_id>', methods=['GET'])
+@receipt_blueprint.route('/user-items/<int:receipt_id>', methods=['GET'])
 def get_user_item_associations(receipt_id: int):
     
     try:
         with SessionLocal() as session:
+            
+            # Verify that the receipt with the provided ID exists
+            receipt = session.execute(select(Receipt).\
+                where(Receipt.receipt_id == receipt_id)).one_or_none()
+            if not receipt:
+                return jsonify({
+                    "error": "Not Found",
+                    "message": "Receipt with this ID does not exist"
+                }), 404
+            
+            # Execute the results
             results = session.query(UserItems).\
                 join(Item, Item.item_id==UserItems.c.item_id).\
                 filter(Item.receipt_id==receipt_id).all()
@@ -282,191 +352,10 @@ def get_user_item_associations(receipt_id: int):
         }
 
         return jsonify(user_item_association), 200
-        
+    
+    # Raise internal server error
     except Exception as e:
         logger.info(str(e))
-        
-
-@receipt_blueprint.route('/add/user-cost/', methods=['POST'])
-def add_user_costs():
-    """
-    Add a new entry of user spending given the user ID and receipt ID. 
-    Expects a object structure JSON in the format of:    
-        {"user_id": 1, "receipt_id": 2}
-    """
-    try:
-        data: Dict = request.json
-        logger.debug(f"Received user-cost data: {data}")
-        
-        # Check that data is a dictionary
-        if not isinstance(data, dict):
-            logger.error(f"Data is not a dict, but of type {type(data)}.")
-            return jsonify({"status": "failed"}), 400
-
-        # Ensure necessary fields are present
-        required_fields = ["user_id", "receipt_id"]
-        for field in required_fields:
-            if field not in data:
-                msg = f"Missing required field: {field}"
-                logger.error(msg)
-                return jsonify({"status": "failed", "message": msg}), 400
-                
-        # Ensure field types are correct
-        if not isinstance(data["user_id"], int):
-            msg = f"user_id must be an integer. Received {data['user_id']} of type {type(data['user_id'])}"
-            logger.error(msg)
-            return jsonify({"status": "failed", "message": msg}), 400
-
-        if not isinstance(data["receipt_id"], int):
-            msg = f"receipt_id must be an integer. Received {data['receipt_id']} of type {type(data['receipt_id'])}"
-            logger.error(msg)
-            return jsonify({"status": "failed", "message": msg}), 400
-
-        # Add new entries to the database
-        with SessionLocal() as session:
-
-            user_id = data.get("user_id")
-            receipt_id = data.get("receipt_id")
-
-            logger.debug(f"Preparing to add spending entry for user ID {user_id} on receipt ID ")
-            stmt = insert(UserSpending).values(
-                    user_id=user_id,
-                    receipt_id=receipt_id,
-                    cost=0)
-            session.execute(stmt)
-            session.commit()
-
-        return jsonify({"status": "success"}), 200
-                    
-    except Exception as e:
-        logger.error(str(e))
-        return jsonify({"status": "failed", "message": str(e)}), 400
-    
-    
-@receipt_blueprint.route('/get/user-cost/<int:user_id>', methods=['GET'])
-def get_user_costs(user_id: int):
-    """
-    Given a user ID, gets an array of the time (of the receipt) and cost spent
-    on that receipt.
-        [
-            {"receipt_id" 1, "slot_time":  14-Jun-24, "cost": 12.78},
-            {"receipt_id" 2, "slot_time":  15-Jun-24, "cost":  9.10}
-        ]
-    """
-    try:
-        
-        # Validate that user_id is an integer
-        if not isinstance(user_id, int):
-            msg = f"User ID is not an int, but is of type {user_id}, with content user_id={user_id}"
-            logger.error(msg)
-            return jsonify({"status": "failed", "message": msg}), 400
-
-        
-        with SessionLocal() as session:
-            # Performing an inner join where receipt ID matches and filter
-            # by user ID
-            # Perform an inner join and select the required fields
-            results = session.query(
-                Receipt.receipt_id,
-                Receipt.slot_time,
-                UserSpending.c.cost
-            )\
-            .join(UserSpending, UserSpending.c.receipt_id == Receipt.receipt_id)\
-            .filter(UserSpending.c.user_id == user_id)\
-            .all()  # Get all results
-                
-            # Return error 404 if results are no results are returned
-            if not results:
-                msg = f"No records found for the given user_id"
-                logger.info(msg)
-                return jsonify({"status": "failed", "message": msg}), 404
-            
-            # Initialize an empty list to store the dictionary
-            data_list = []
-            
-            for row in results:
-                data_dict = {"receipt_id": row.receipt_id,
-                             "slot_time":  row.slot_time,
-                             "cost":       row.cost}
-                data_list.append(data_dict)
-                
-        return jsonify(data_list), 200
-
-    except Exception as e:
-        logger.critical(str(e))
-        return jsonify({"status": "failed", "message": str(e)}), 400
-    
-
-@receipt_blueprint.route('/update/user-cost/', methods=['PUT'])
-def update_user_costs():
-    """
-    Expects an array-based JSON structure containing the user ID, receipt ID
-    and the user's spending in the receipt.
-        [
-            {"user_id": 1, "receipt_id": 2, "cost": 12.78},
-            {"user_id:: 2, "receipt_id": 2, "cost":  9.10}
-        ]
-    """
-    try:
-        data: List[Dict] = request.json
-        logger.debug(f"Received user-cost data: {data}")
-        
-        # Check that data is a list
-        if not isinstance(data, list):
-            logger.error(f"Data is not a list, but of type {type(data)}.")
-            return jsonify({"status": "failed"}), 400
-
-        # Validate each entry in the list
-        for obj in data:
-
-            # Ensure list content are dictionaries
-            if not isinstance(obj, dict):
-                msg = f"Expected dict, but received {type(obj)}"
-                logger.error(msg)
-                return jsonify({"status": "failed", "message": msg}), 400
-            
-            # Ensure necessary fields are present
-            required_fields = ["user_id", "receipt_id", "cost"]
-            for field in required_fields:
-                if field not in obj:
-                    msg = f"Missing required field: {field}"
-                    logger.error(msg)
-                    return jsonify({"status": "failed", "message": msg}), 400
-                
-            # Ensure field types are correct
-            if not isinstance(obj["user_id"], int):
-                msg = f"user_id must be an integer. Received {obj['user_id']}"
-                logger.error(msg)
-                return jsonify({"status": "failed", "message": msg}), 400
-
-            if not isinstance(obj["receipt_id"], int):
-                msg = f"receipt_id must be an integer. Received {obj['receipt_id']}"
-                logger.error(msg)
-                return jsonify({"status": "failed", "message": msg}), 400
-
-            if not isinstance(obj["cost"], (float, int)) or obj["cost"] < 0:
-                msg = f"cost must be a positive number. Received {obj['cost']}"
-                logger.error(msg)
-                return jsonify({"status": "failed", "message": msg}), 400
-
-        # Update old user spending entries
-        with SessionLocal() as session:
-            for entry in data:
-                
-                # Extract data from dictionary
-                user_id = entry.get("user_id")
-                receipt_id = entry.get("receipt_id")
-                cost = entry.get("cost")
-                
-                stmt = update(UserSpending).where(
-                        (UserSpending.c.user_id==user_id) &
-                        (UserSpending.c.receipt_id==receipt_id))\
-                            .values(cost=cost)
-                session.execute(stmt)
-            session.commit()
-
-        return jsonify({"status": "success"}), 200
-                    
-    except Exception as e:
-        logger.error(str(e))
-        return jsonify({"status": "failed", "message": str(e)})
+        return jsonify({"error": "Internal Server Error",
+                        "message": "Failed to get user and item mappings"}),\
+                            500

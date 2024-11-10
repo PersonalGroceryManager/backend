@@ -1,13 +1,16 @@
 # Standard Imports
 from typing import Tuple, Dict
 from passlib.context import CryptContext
-from sqlalchemy import select, insert
+
+# Third party imports
+from sqlalchemy import select, update, insert
 from sqlalchemy.sql import exists
 from flask import Blueprint, request, jsonify, session, redirect, url_for
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 
 # Project-Specific Imports
 from src.utils.database import SessionLocal
-from src.utils.models import Group, User, UserGroups
+from src.utils.models import Group, User, Receipt, UserGroups, UserSpending
 from src.utils.Authentication import Authentication
 
 users_blueprint = Blueprint('users', __name__)
@@ -70,22 +73,13 @@ def register_user():
 
 
 @users_blueprint.route('', methods=['DELETE'])
+@jwt_required()
 def delete_user():
     """
-    Delete a user from the database, given the user ID or username.
+    Delete the current user from the database, given the user ID in JWT
     """
     try:
-        data = request.json
-        user_id = data.get('user_id')
-        username = data.get('username')
-        
-        # Raise bad request error if both user ID and username are not given
-        if (not user_id) and (not username):
-            return jsonify({
-                "error": "Bad Request",
-                "message": "User ID not given"
-            }), 400
-        
+        user_id = get_jwt_identity()
         
         with SessionLocal() as db_session:
 
@@ -93,10 +87,7 @@ def delete_user():
             # to username
             if user_id:
                 user = db_session.query(User)\
-                    .filter_by(user_id=user_id).one_or_none()
-            elif username:
-                user = db_session.query(User)\
-                    .filter_by(username=username).one_or_none()    
+                    .filter_by(user_id=user_id).one_or_none() 
 
             # Return 404 Not found is user does not exist            
             if not user:
@@ -131,8 +122,10 @@ def login():
     
     # Send the user_id to the frontend to user
     if user_id:
+        # Generate JWT and pass as access token
+        access_token = create_access_token(identity=user_id)
         return jsonify({"message": "Login successful!", 
-                        "user_id": user_id}), 200
+                        "access_token": access_token}), 200
     else:
         return jsonify({"error": "Unauthorized",
                         "message": "Invalid username or password", 
@@ -143,27 +136,10 @@ def logout():
     session.pop('user_id', None)
     return redirect(url_for(login))
 
-
-@users_blueprint.route("/get-all", methods=['GET'])
-def get_all_users():
-    """
-    Get all user information.
-    """
-    try:
-        with SessionLocal() as session:
-            users = session.query(User).all()
         
-            return jsonify([{
-                "user_id": user.user_id,
-                "username": user.username
-            } for user in users]), 200
-        
-    except Exception as e:
-        return jsonify({"status": "failed", "message": str(e)}), 400
-        
-        
-@users_blueprint.route("/<int:user_id>", methods=['GET'])
-def get_user_info_by_id(user_id:int):
+@users_blueprint.route("", methods=['GET'])
+@jwt_required()
+def get_user_info():
     """
     Get user information of a user given user ID, in the form:
         {
@@ -173,6 +149,9 @@ def get_user_info_by_id(user_id:int):
         }
     """
     try:
+        # Returns error 401 if not authorized
+        user_id = get_jwt_identity()
+        
         with SessionLocal() as session:
             user = session.query(User).filter_by(user_id=user_id).one_or_none()
             return jsonify({
@@ -207,12 +186,16 @@ def resolve_username(username: str):
         return jsonify({"status": "failed", "message": str(e)}), 500
     
 
-@users_blueprint.route("/<int:user_id>/groups", methods=['GET'])
+@users_blueprint.route("/groups", methods=['GET'])
+@jwt_required()
 def get_groups_joined_by_user(user_id: int):
     """
     Get the groups joined by the user.
     """
     try:
+        
+        user_id = get_jwt_identity()
+        
         with SessionLocal() as session:
             groups_joined_by_user = session.query(Group).join(
                 UserGroups, Group.group_id == UserGroups.c.group_id
@@ -231,3 +214,141 @@ def get_groups_joined_by_user(user_id: int):
         
     except Exception as e:
         return jsonify({"status": "failed", "message": str(e)}), 500
+
+
+@users_blueprint.route("/costs", methods=['GET'])
+@jwt_required()
+def get_user_costs(user_id: int):
+    """
+    Given a user ID, gets an array of the time (of the receipt) and cost spent
+    on that receipt.
+        [
+            {"receipt_id" 1, "slot_time":  14-Jun-24, "cost": 12.78},
+            {"receipt_id" 2, "slot_time":  15-Jun-24, "cost":  9.10}
+        ]
+    """
+    try:
+        
+        # Return 401 unauthorized error if no JWT
+        user_id = get_jwt_identity()
+        
+        # Validate that user_id is an integer
+        if not isinstance(user_id, int):
+            msg = f"User ID is not an int, but is of type {user_id}, \
+                with content user_id={user_id}"
+            return jsonify({"Error": "Not Found", "message": msg}), 400
+        
+        with SessionLocal() as session:
+            # Performing an inner join where receipt ID matches and filter
+            # by user ID
+            # Perform an inner join and select the required fields
+            results = session.query(Receipt.receipt_id,
+                                    Receipt.slot_time,
+                                    UserSpending.c.cost)\
+            .join(UserSpending, 
+                  UserSpending.c.receipt_id == Receipt.receipt_id)\
+            .filter(UserSpending.c.user_id == user_id)\
+            .all()
+                
+            # Return error 404 if results are no results are returned
+            if not results:
+                msg = f"No records found for the given user_id"
+                return jsonify({"error": "Not Found", "message": msg}), 404
+            
+            # Initialize an empty list to store the dictionary
+            data_list = []
+            
+            for row in results:
+                data_dict = {"receipt_id": row.receipt_id,
+                             "slot_time":  row.slot_time,
+                             "cost":       row.cost}
+                data_list.append(data_dict)
+                
+        return jsonify(data_list), 200
+
+    except Exception as e:
+        return jsonify({"error": "Internal Server Error", 
+                        "message": str(e)}), 500
+
+
+@users_blueprint.route('/costs', methods=['PUT'])
+def update_user_costs():
+    """
+    Expects an array-based JSON structure containing the user ID, receipt ID
+    and the user's spending in the receipt.
+        [
+            {"user_id": 1, "receipt_id": 2, "cost": 12.78},
+            {"user_id:: 2, "receipt_id": 2, "cost":  9.10}
+        ]
+    """
+    try:
+        data = request.json
+        
+        # Check that data is a list
+        if not isinstance(data, list):
+            return jsonify({"status": "failed"}), 400
+
+        # Validate each entry in the list
+        for obj in data:
+
+            # Ensure list content are dictionaries
+            if not isinstance(obj, dict):
+                msg = f"Expected dict, but received {type(obj)}"
+                return jsonify({"status": "failed", "message": msg}), 400
+            
+            # Ensure necessary fields are present
+            required_fields = ["user_id", "receipt_id", "cost"]
+            for field in required_fields:
+                if field not in obj:
+                    msg = f"Missing required field: {field}"
+                    return jsonify({"status": "failed", "message": msg}), 400
+                
+            # Ensure field types are correct
+            if not isinstance(obj["user_id"], int):
+                msg = f"user_id must be an integer. Received {obj['user_id']}"
+                return jsonify({"status": "failed", "message": msg}), 400
+
+            if not isinstance(obj["receipt_id"], int):
+                msg = f"receipt_id must be an integer. Received {obj['receipt_id']}"
+                return jsonify({"status": "failed", "message": msg}), 400
+
+            if not isinstance(obj["cost"], (float, int)) or obj["cost"] < 0:
+                msg = f"cost must be a positive number. Received {obj['cost']}"
+                return jsonify({"status": "failed", "message": msg}), 400
+
+        with SessionLocal() as session:
+            for entry in data:
+                
+                # Extract data from dictionary
+                user_id = entry.get("user_id")
+                receipt_id = entry.get("receipt_id")
+                cost = entry.get("cost")
+                
+                # Check if entry exists
+                existing_entry = session.query(UserSpending).filter_by(
+                    user_id=user_id,
+                    receipt_id=receipt_id
+                ).one_or_none()
+                
+                # If user has no association with the receipt ID, 
+                # create a new entry
+                if not existing_entry:
+                    new_entry = UserSpending(user_id=user_id, 
+                                             receipt_id=receipt_id, 
+                                             cost=cost)
+                    session.add(new_entry)
+                
+                # If an entry exists, just update the values
+                else:
+                    stmt = update(UserSpending).where(
+                            (UserSpending.c.user_id==user_id) &
+                            (UserSpending.c.receipt_id==receipt_id))\
+                                .values(cost=cost)
+                
+                session.execute(stmt)
+            session.commit()
+
+        return 204
+                    
+    except Exception as e:
+        return jsonify({"status": "failed", "message": str(e)})

@@ -1,0 +1,828 @@
+# Meta Information ============================================================
+openapi: 3.1.0
+info:
+  version: 1.0.0
+  title: Grocery Manager API
+  description: OpenAPI document of Grocery Manager backend routes
+
+servers:
+  - url: 
+    description: Main production server 
+
+# Paths/Routes ================================================================
+paths:
+
+  # User Routes ===============================================================
+  /users/:
+
+    get:
+      summary: Obtain user information given ID in path
+      description: Obtain user information
+      securitySchemes:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: A JSON array containing user_id, username and email
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Unauthorized access
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      summary: Register / create a new user given username, password and email
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                  description: The username of the new user.
+                  example: "example_user"
+                password:
+                  type: string
+                  description: The password for the new user.
+                  example: "example_password"
+                email:
+                  type: string
+                  description: The email address of the new user.
+                  example: "example@gmail.com"
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "User created successfully"
+        '400':
+          description: Bad request, missing required fields - username, password and email
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Conflict, user already exists
+          $ref: '#/components/responses/ResourceAlreadyExists'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      summary: Delete a user given the user ID
+      operationId: deleteUser
+      securitySchemes:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              oneOf:
+                - required: ["user_id"]
+                - required: ["username"]
+              properties:
+                user_id:
+                  type: int
+                  description: The user_id of the user to be deleted.
+                  example: 223
+                username:
+                  type: string
+                  description: The username of the user to be deleted.
+                  example: "random_username"
+      responses:
+        '204':
+          description: User successfully deleted - No Content
+        '400':
+          description: User ID not given
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Unauthorized access
+        '404':
+          description: User with this user ID does not exist
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError' 
+
+  /users/login:
+    post:
+      summary: Attempt to authenticate the user
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: str
+                  description: Username of the user to be authenticated
+                password:
+                  type: str
+                  description: Password of the user to be authenticated
+      responses:
+        '200': 
+          description: Authentication approved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  access_token:
+                    description: A JWT containing user ID
+                    type: string
+        '400':
+          description: Bad Request - username or password not provided
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Unauthorized
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /users/resolve/{username}:
+
+    parameters:
+      - name: username
+        in: path
+        required: true
+        schema:
+          type: integer
+    
+    get:
+      summary: Resolve a username and obtain its user ID
+      responses:
+        '200':
+          description: User successfully found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_id: 
+                    type: integer
+                    description: The user ID for the given name
+                  message:
+                    type: string
+                    description: General request message
+                    example: User ID found
+        '404':
+          description: No user with this username found
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /users/groups:
+    get: 
+      summary: Get all group names joined by users
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: A list of groups the user is a member of
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    group_id:
+                      type: integer
+                      description: The ID of the group
+                    group_name:
+                      type: string
+                      description: The name of the group
+                    description:
+                      type: string
+                      description: A brief description of the group
+        '404':
+          description: No groups associated with user
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  
+  /users/costs:
+
+    get: 
+      summary: Get costs associated with a user's receipts
+      operationId: getUserCosts
+      tags:
+        - Users
+      security:
+        - bearerAuth: []  # This refers to the JWT-based security
+      parameters:
+        - in: query
+          name: user_id
+          required: true
+          schema:
+            type: integer
+            description: The user ID for which to fetch the costs
+      responses:
+        '200':
+          description: A list of receipt costs for the user.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    receipt_id:
+                      type: integer
+                      description: The ID of the receipt
+                    slot_time:
+                      type: string
+                      format: date
+                      description: The date/time of the receipt
+                    cost:
+                      type: number
+                      format: float
+                      description: The cost of the receipt
+        '400': 
+          description: Bad Request, invalid user_id
+        '401':
+          description: Unauthorized access (Missing/Invalid JWT token)
+        '404':
+          description: Not Found, no records found for the user
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        
+    put:
+      summary: Add a new entry or update existing entry of user spending given user ID and receipt ID.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user_id:
+                  type: int
+                  description: User ID to be added
+                receipt_id:
+                  type: str
+                  description: Receipt ID to be added
+                cost:
+                  type: float
+                  description: Cost of which user has spent on the receipt
+      responses:
+        '204':
+          description: Entry successfully added
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+
+
+  # Group Routes ==============================================================
+  /groups/:
+    get:
+      summary: Get all group information
+      responses:
+        '200':
+          description: Group information retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Group'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      summary: Create a group
+      description: This endpoint allows creation of a new group by providing the group name and an optional description
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                group_name:
+                  type: string
+                  description: The name of the group. This field is required.
+                description:
+                  type: string
+                  description: A description of the group. This field is optional.
+              required:
+                - group_name
+      responses:
+        '201': 
+          description: Group created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Group'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/ResourceAlreadyExists'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      summary: Update a group
+      description: This endpoint updates an existing group by providing a new group name and an optional description
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Group'
+      responses:
+        '200': 
+          description: Group updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Group'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      summary: Delete a group
+      description: This endpoint deletes a group by providing a group name
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                group_name:
+                  type: string
+                  description: Name of the group to be deleted
+      responses:
+        '204':
+          description: Group deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /groups/resolve/{group_name}:
+    get:
+      summary: Get the group ID for a given group name
+      parameters:
+        - name: group_name
+          in: path
+          required: true
+          schema:
+            type: string
+      
+      responses:
+        '200':
+          description: Group successfully found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: 
+                    type: string
+                    example: "Group resolved successfully"
+                  group_id:
+                    type: int
+                    description: Group ID of the given group name
+        '404':
+          description: No group found with name '{group_name}'
+          $ref: '#/components/responses/NotFoundError'
+
+  /groups/{group_id}:
+
+    parameters:
+      - name: group_id
+        in: path
+        required: true
+        schema:
+          type: integer
+
+    get:
+      summary: Get information of the group with specified group_id
+      responses:
+        '200':
+          description: Group information retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Group'
+        '404':
+          description: Group not found
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      summary: This endpoint
+      responses:
+        '200':
+          description: Group information updated successfully
+        '404':
+          description: Group not found
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete: 
+      summary: Delete a group based on its ID.
+      responses:
+        '204':
+          description: Group deleted successfully
+        '404':
+          description: Group not found
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /groups/{group_id}/users:
+
+    parameters:
+    - name: group_id
+      in: path
+      required: true
+      schema:
+        type: integer
+
+    get:
+      summary: Get a list of all users within the group
+      responses:
+        '200':
+          description: A list of users successfully found
+          content:
+            application/json:
+              type: array
+              items:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: No users found within this group
+          $ref: '#/components/responses/NotFoundError'
+  
+  /groups/{group_id}/users/<user_id>:
+
+    parameters:
+    - name: group_id
+      in: path
+      required: true
+      schema:
+        type: integer
+    - name: user_id
+      in: path
+      required: true
+      schema:
+        type: integer
+
+    post:
+      summary: Add a user to the group given user ID and group ID in path
+      responses:
+        '200':
+          description: User successfully added to group
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    description: User successfully added to group
+                    example: User added to group
+        '404':
+          description: Group or user does not exist
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          description: User is already in the group
+          $ref: '#/components/responses/ResourceAlreadyExists'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    
+    delete:
+      summary: Delete a user from a group
+      responses:
+        '200': 
+          description: User successfully removed from group
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: User removed from group
+        '404':
+          description: User of group does not exist
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # Receipt routes ============================================================
+  groups/{group_id}/receipts:
+
+    parameters:
+      - name: group_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          description: The group ID of which receipts to look for
+
+    get:
+      summary: Get a list of all receipts associated with the group given group ID
+      responses:
+        '200':
+          description: Receipts found
+          content:
+            application/json:
+              schema:
+                type: array
+                properties:
+                  items:
+                    $ref: '#/components/schemas/Receipt'
+        '404':
+          description: Group does not exist or no receipts found with this group
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post: 
+      summary: Add a receipt to a group
+      description: Uploads a PDF receipt and associates it with the group with provided group ID
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: PDF file containing the receipt details
+      responses:
+        '201':
+          description: Receipt successfully added to group
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Receipt successfully added to group
+        '400':
+          description: Bad Request - file empty or invalid file type
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: No group with given group ID found
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      
+    delete:
+      summary: Delete a receipt from a group
+      description: NOT IMPLEMENTED
+
+
+  receipts/{receipt_id}/items:
+
+    parameters:
+    - name: receipt_id
+      in: path
+      required: true
+      schema:
+        type: integer
+
+    get:
+      summary: Get a list of all items associated with the receipt given receipt ID
+      responses:
+        '200':
+          description: Receipt found. Returns an array of items
+          content:
+            application/json:
+              schema:
+                type: array
+                properties:
+                  items:
+                    $ref: '#/components/schemas/Item'
+                
+        '404':
+          description: No items found with this receipt
+          $ref: '#/components/responses/NotFoundError'
+
+  receipts/{receipt_id}/users/{user_id}:
+
+    parameters:
+      - name: receipt_id
+        in: path
+        required: true
+        schema: 
+          type: integer
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: integer
+
+    post:
+      summary: Create a new mapping between a user and a receipt given both IDs
+
+      responses:
+        '201':
+          description: User linked to all items of this receipt
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "User added to this receipt"
+        '404':
+          description: Specified user or receipt not found
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  receipts/user-items/{receipt_id}:
+    get: 
+      summary: Obtain the existing mappings between user and items, including each row of user ID, item ID and quantity
+      responses:
+        '200':
+          description: User and item quantity rows successfully obtained
+          content: 
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserItemQuantity'
+        '404':
+          description: Receipt with this ID does not exist
+          $ref: '#/components/responses/NotFoundError' 
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        
+  receipts/user-items:
+    put:
+      summary: Update the existing mappings between user and items, specifically the quantity by each user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: 
+                $ref: '#/components/schemas/UserItemQuantity'
+      responses:
+        '200':
+          description: User and item quantity rows successfully updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "User and quantity rows updated"
+        '404':
+          description: User or item with given ID not found
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+
+# Reusable Components =========================================================
+components:
+
+  # Standard objects
+  schemas:
+    Group:
+      type: object
+      properties:
+        group_id:
+          type: integer
+        group_name:
+          type: string
+        description:
+          type: string
+    User:
+      type: object
+      properties:
+        user_id:
+          type: integer
+        username:
+          type: string
+        email:
+          type: string
+      required:
+        - user_id
+        - username
+        - email
+    Receipt:
+      type: object
+      properties:
+        receipt_id:
+          type: integer
+        order_id:
+          type: integer
+        slot_time:
+          type: datetime
+        total_price:
+          type: float
+        payment_card:
+          type: int
+          description: Last four digits of the payment card
+    Item:
+      type: object
+      properties:
+        item_id:
+          type: integer
+        item_name:
+          type: string
+        quantity:
+          type: integer
+        weight:
+          type: float
+        price: 
+          type: float
+    UserItemQuantity:
+      type: object
+      properties:
+        user_id:
+          type: integer
+          description: The ID of the user associated with the item.
+        item_id:
+          type: integer
+          description: The ID of the item associated with the user.
+        unit:
+          type: number
+          format: float
+          description: The unit amount associated with the user-item pair (should be a positive number).
+      required:
+        - user_id
+        - item_id
+        - unit
+
+  # Security Scheme
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  # Standard responses
+  responses:
+    BadRequest:
+      description: Bad request - malformed request syntax
+      content: 
+        application/json:
+          schema: 
+            type: object
+            properties:
+              error:
+                type: string
+                example: 'Resource identified cannot be found in request'
+    NotFoundError:
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: 'No users with this identified is found'
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: 'Internal Server Error'
+              message:
+                type: string
+                example: 'A backend error has occured.'
+    ResourceAlreadyExists:
+      description: Conflict - Resource already exists
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: 'Resource already exists'
+              message:
+                type: string
+                example: 'The resource you are trying to create or change to already exist'
