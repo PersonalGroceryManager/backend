@@ -1,5 +1,5 @@
 import pytest
-from src.run import create_app
+from src import create_app
 from src.utils.database import engine, Base
 
 

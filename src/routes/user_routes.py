@@ -184,6 +184,28 @@ def resolve_username(username: str):
     except Exception as e:
         print(str(e))
         return jsonify({"status": "failed", "message": str(e)}), 500
+
+
+@users_blueprint.route("/resolve/<int:user_id>", methods=['GET'])
+def resolve_user_id(user_id: int):
+    """Get username of a given user ID"""
+    try:
+        with SessionLocal() as session:
+            username = session.scalar(select(User.username)\
+                .where(User.user_id == user_id))
+            
+            # Not Found Error: If no user ID found for this name
+            if not username:
+                return jsonify({
+                    "message": "No users found with this ID"
+                }), 404
+            
+            # Success: return status code 200 (default)
+            return jsonify({"message": "Username found", "username": username})
+        
+    except Exception as e:
+        print(str(e))
+        return jsonify({"status": "failed", "message": str(e)}), 500
     
 
 @users_blueprint.route("/groups", methods=['GET'])
