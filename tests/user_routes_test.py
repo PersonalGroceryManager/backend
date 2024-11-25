@@ -188,3 +188,27 @@ def test_get_user_id(client):
     data = response.get_json()
     user_id = data.get('user_id')
     assert user_id == 1
+
+
+def test_get_username(client):
+    
+    test_username = 'Test Username'
+    
+    # Create/register a user
+    response = client.post('/users', json={
+        'username': f'{test_username}',
+        'password': 'Test Password',
+        'email': 'test@email.com'
+    })
+    assert response.status_code == 201
+    
+    # The first user should have a user ID of 1
+    response = client.get(f'users/resolve/1')
+    assert response.status_code == 200
+
+    # Verify username = Test Username (newly created)
+    data = response.get_json()
+    print(data)
+    username = data.get('username')
+    assert username == test_username
+    

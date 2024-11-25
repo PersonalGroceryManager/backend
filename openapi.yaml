@@ -179,6 +179,38 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /users/resolve/{user-id}:
+
+    parameters:
+      - name: user-id
+        in: path
+        required: true
+        schema:
+          type: integer
+    
+    get:
+      summary: Resolve a username and obtain its user ID
+      responses:
+        '200':
+          description: User successfully found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  username: 
+                    type: string
+                    description: The username for the given user ID
+                  message:
+                    type: string
+                    description: General request message
+                    example: Username found
+        '404':
+          description: No user with this user ID found
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /users/groups:
     get: 
       summary: Get all group names joined by users
