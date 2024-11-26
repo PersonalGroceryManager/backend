@@ -18,8 +18,16 @@ def create_app():
 
     # Generate a 24-byte random key
     # TODO: Use a fix key in env variable for persistance across redeployments
+    # This also causes issue in initial sign in
     app.secret_key = os.urandom(24)
     app.config["JWT_SECRET_KEY"] = os.urandom(24)
+    app.secret_key = "random"
+    app.config["JWT_SECRET_KEY"] = "random"
+
+    # Change token expiry date to an hour (3600s)
+    app.config["JWT_ACCESS_TOKEN_EXPIRES"] = 3600
+    
     jwt = JWTManager(app)
+    
 
     return app

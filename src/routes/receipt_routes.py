@@ -155,7 +155,7 @@ def get_receipt_items(receipt_id: int):
 
             logger.debug(f"Gathered receipt data to send.")
 
-        return jsonify({"items": results}), 200
+        return jsonify(results), 200
 
     except Exception as e:
         logger.error(str(e))
@@ -343,13 +343,11 @@ def get_user_item_associations(receipt_id: int):
                 join(Item, Item.item_id==UserItems.c.item_id).\
                 filter(Item.receipt_id==receipt_id).all()
         
-        user_item_association = {
-            "user_item_association": [{
-                'user_id': user_item_comb.user_id,
-                'item_id': user_item_comb.item_id,
-                'unit': user_item_comb.unit,
+        user_item_association = [{
+            'user_id': user_item_comb.user_id,
+            'item_id': user_item_comb.item_id,
+            'unit': user_item_comb.unit,
             } for user_item_comb in results]
-        }
 
         return jsonify(user_item_association), 200
     

@@ -125,7 +125,8 @@ def login():
         # Generate JWT and pass as access token
         access_token = create_access_token(identity=user_id)
         return jsonify({"message": "Login successful!", 
-                        "access_token": access_token}), 200
+                        "access_token": access_token,
+                        "user_id": user_id}), 200
     else:
         return jsonify({"error": "Unauthorized",
                         "message": "Invalid username or password", 
@@ -210,7 +211,7 @@ def resolve_user_id(user_id: int):
 
 @users_blueprint.route("/groups", methods=['GET'])
 @jwt_required()
-def get_groups_joined_by_user(user_id: int):
+def get_groups_joined_by_user():
     """
     Get the groups joined by the user.
     """
@@ -240,7 +241,7 @@ def get_groups_joined_by_user(user_id: int):
 
 @users_blueprint.route("/costs", methods=['GET'])
 @jwt_required()
-def get_user_costs(user_id: int):
+def get_user_costs():
     """
     Given a user ID, gets an array of the time (of the receipt) and cost spent
     on that receipt.
@@ -289,6 +290,7 @@ def get_user_costs(user_id: int):
         return jsonify(data_list), 200
 
     except Exception as e:
+        print(e)
         return jsonify({"error": "Internal Server Error", 
                         "message": str(e)}), 500
 
@@ -355,10 +357,9 @@ def update_user_costs():
                 # If user has no association with the receipt ID, 
                 # create a new entry
                 if not existing_entry:
-                    new_entry = UserSpending(user_id=user_id, 
-                                             receipt_id=receipt_id, 
-                                             cost=cost)
-                    session.add(new_entry)
+                    # This table is not an ORM table so must use traditional
+                    # query-based syntax
+                    stmt = UserSpending.insert().values(user_id=user_id, receipt_id=receipt_id, cost=cost)
                 
                 # If an entry exists, just update the values
                 else:
@@ -366,11 +367,12 @@ def update_user_costs():
                             (UserSpending.c.user_id==user_id) &
                             (UserSpending.c.receipt_id==receipt_id))\
                                 .values(cost=cost)
-                
+                    print(stmt)
                 session.execute(stmt)
             session.commit()
 
-        return 204
+        # Must have empty content
+        return '', 204
                     
     except Exception as e:
-        return jsonify({"status": "failed", "message": str(e)})
+        return jsonify({"status": "failed", "message": str(e)}), 500

@@ -139,6 +139,9 @@ paths:
                   access_token:
                     description: A JWT containing user ID
                     type: string
+                  user_id: 
+                    description: User ID
+                    type: int
         '400':
           description: Bad Request - username or password not provided
           $ref: '#/components/responses/BadRequest'
