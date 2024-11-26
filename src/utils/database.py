@@ -31,7 +31,7 @@ elif mode == 'production':
 else:
     raise ValueError(f"Invalid MODE: {mode}")
 
-
+print(f"Running in {mode} mode!")
 # Create Engine
 engine = create_engine(DATABASE_URL)
 
