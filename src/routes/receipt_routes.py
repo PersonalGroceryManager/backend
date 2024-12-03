@@ -86,6 +86,20 @@ def add_receipt_to_group(group_id: int):
         # in receipt_reader folder, whereas receipt_for_db is a database entry
         receipt = SainsburysReceipt(file)
         
+        # Ensure the receipt is new - return Resource Already Exists error when
+        # a receipt with the same order ID is found in the specified group
+        with SessionLocal() as session:
+            
+            receipt_exists_in_group = session.query(Receipt)\
+                .filter(Receipt.order_id==receipt.order_id,
+                        Receipt.group_id==group_id)\
+                .one_or_none()
+                
+            if receipt_exists_in_group:
+                return jsonify({"message": 
+                    f"Receipt with order ID {receipt.order_id} already\
+                        exists in group with ID: {group_id}"}), 409
+        
         # Add receipt to database
         receipt_for_db = Receipt(order_id=receipt.order_id,
                               slot_time=receipt.order_date,
