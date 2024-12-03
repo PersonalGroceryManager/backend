@@ -33,7 +33,7 @@ def register_user():
         "email": "example@gmail.com"
     }
     """
-    logger.info(f"Attempting to register new user with username {username}")
+    logger.info(f"Attempting to register new user.")
     
     try:
 
