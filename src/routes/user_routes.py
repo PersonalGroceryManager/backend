@@ -1,4 +1,5 @@
 # Standard Imports
+import logging
 from typing import Tuple, Dict
 from passlib.context import CryptContext
 
@@ -18,6 +19,9 @@ users_blueprint = Blueprint('users', __name__)
 # Authentication Context
 auth = Authentication()
 
+# Module-level logging inherited from 'main'
+logger = logging.getLogger('main.user_routes')
+
 
 @users_blueprint.route("", methods=['POST'])
 def register_user():
@@ -29,6 +33,8 @@ def register_user():
         "email": "example@gmail.com"
     }
     """
+    logger.info(f"Attempting to register new user.")
+    
     try:
 
         data = request.json
@@ -52,6 +58,7 @@ def register_user():
             user_exists = session.query(exists().\
                 where(User.username == username)).scalar()
             if user_exists:
+                logger.warning(f"User with username '{username}' already exists.")
                 return jsonify({"error": "Resource Conflict", 
                                 "message": "User already exists"}), 409
 
@@ -64,10 +71,12 @@ def register_user():
                             email=email)
             session.add(new_user)
 
+        logger.info("User created successfully.")
         return jsonify({
             "message": "User created successfully"}), 201
 
     except Exception as e:
+        logger.error(f"User Registration Failed - {str(e)}")
         return jsonify({"error": "Internal Server Error", 
                         "message": str(e)}), 500
 
@@ -78,8 +87,11 @@ def delete_user():
     """
     Delete the current user from the database, given the user ID in JWT
     """
+    logger.info(f"Attempting to delete a user.")
+    
     try:
         user_id = get_jwt_identity()
+        logger.info(f"Attempting to delete a user with ID {user_id}.")
         
         with SessionLocal() as db_session:
 
@@ -91,6 +103,8 @@ def delete_user():
 
             # Return 404 Not found is user does not exist            
             if not user:
+                logger.error(f"User cannot be deleted since a user with ID \
+                    {user_id} cannot be found")
                 return jsonify({"Error": "Not Found", 
                                 "message": "User does not exists!"}), 404
             
@@ -98,9 +112,11 @@ def delete_user():
             db_session.delete(user)
 
         # Return 204 No Content upon successful deletion
+        logger.info(f"User with ID {user_id} deleted successfully.")
         return '', 204
         
     except Exception as e:
+        logger.error(f"User deletion failed - {str(e)}")
         return jsonify({"status": "failed", "message": str(e)}), 500
     
 
@@ -111,7 +127,10 @@ def login():
     username = data.get('username')
     password = data.get('password')
     
+    logger.info(f"Attempt to login by {username}.")
+    
     if (not username) or (not password):
+        logger.warning(f"Login failed as username or password is not given.")
         return jsonify({
             "error": "Bad Request",
             "message": "Username or password not provided"
@@ -122,12 +141,17 @@ def login():
     
     # Send the user_id to the frontend to user
     if user_id:
+        
+        logger.info(f"User ID {user_id} authenticated for login.\
+                    Generating JWT token...")
+        
         # Generate JWT and pass as access token
         access_token = create_access_token(identity=user_id)
         return jsonify({"message": "Login successful!", 
                         "access_token": access_token,
                         "user_id": user_id}), 200
     else:
+        logger.warning(f"Login failed as user is unauthorized.")
         return jsonify({"error": "Unauthorized",
                         "message": "Invalid username or password", 
                         "user_id": None}), 401
@@ -149,12 +173,15 @@ def get_user_info():
             "email": "arthur@gmail.com"
         }
     """
+    logger.debug("Attempt to get user information.")
+    
     try:
         # Returns error 401 if not authorized
         user_id = get_jwt_identity()
         
         with SessionLocal() as session:
             user = session.query(User).filter_by(user_id=user_id).one_or_none()
+            logger.info(f"User '{user.username}' found.")
             return jsonify({
                 "user_id": user.user_id,
                 "username": user.username,
@@ -162,6 +189,7 @@ def get_user_info():
                 }), 200
         
     except Exception as e:
+        logger.error(f"Failed to fetch user information - {str(e)}")
         return jsonify({"status": "failed", "message": str(e)}), 400
     
         
@@ -215,9 +243,12 @@ def get_groups_joined_by_user():
     """
     Get the groups joined by the user.
     """
+    logger.info("Attempting to fetch groups joined by user.")
+    
     try:
         
         user_id = get_jwt_identity()
+        logger.info(f"Attempting to fetch groups joined by authorized user with ID {user_id}.")
         
         with SessionLocal() as session:
             groups_joined_by_user = session.query(Group).join(
@@ -236,6 +267,7 @@ def get_groups_joined_by_user():
             ), 200
         
     except Exception as e:
+        logger.error(f"Failed to get groups joined by user - {str(e)}")
         return jsonify({"status": "failed", "message": str(e)}), 500
 
 
@@ -250,6 +282,8 @@ def get_user_costs():
             {"receipt_id" 2, "slot_time":  15-Jun-24, "cost":  9.10}
         ]
     """
+    logger.info("Fetching user costs...")
+    
     try:
         
         # Return 401 unauthorized error if no JWT
@@ -276,6 +310,7 @@ def get_user_costs():
             # Return error 404 if results are no results are returned
             if not results:
                 msg = f"No records found for the given user_id"
+                logger.info(msg)
                 return jsonify({"error": "Not Found", "message": msg}), 404
             
             # Initialize an empty list to store the dictionary
@@ -290,7 +325,7 @@ def get_user_costs():
         return jsonify(data_list), 200
 
     except Exception as e:
-        print(e)
+        logger.error(f"Failed to get user spending - {str(e)}")
         return jsonify({"error": "Internal Server Error", 
                         "message": str(e)}), 500
 
@@ -305,6 +340,8 @@ def update_user_costs():
             {"user_id:: 2, "receipt_id": 2, "cost":  9.10}
         ]
     """
+    logger.info("Updating user costs...")
+    
     try:
         data = request.json
         
@@ -325,19 +362,23 @@ def update_user_costs():
             for field in required_fields:
                 if field not in obj:
                     msg = f"Missing required field: {field}"
+                    logger.info(msg)
                     return jsonify({"status": "failed", "message": msg}), 400
                 
             # Ensure field types are correct
             if not isinstance(obj["user_id"], int):
                 msg = f"user_id must be an integer. Received {obj['user_id']}"
+                logger.info(msg)
                 return jsonify({"status": "failed", "message": msg}), 400
 
             if not isinstance(obj["receipt_id"], int):
                 msg = f"receipt_id must be an integer. Received {obj['receipt_id']}"
+                logger.info(msg)
                 return jsonify({"status": "failed", "message": msg}), 400
 
             if not isinstance(obj["cost"], (float, int)) or obj["cost"] < 0:
                 msg = f"cost must be a positive number. Received {obj['cost']}"
+                logger.info(msg)
                 return jsonify({"status": "failed", "message": msg}), 400
 
         with SessionLocal() as session:
@@ -375,4 +416,5 @@ def update_user_costs():
         return '', 204
                     
     except Exception as e:
+        logger.error(f"Failed to update user spending - {str(e)}")
         return jsonify({"status": "failed", "message": str(e)}), 500

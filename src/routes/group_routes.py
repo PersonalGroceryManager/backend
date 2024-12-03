@@ -1,3 +1,6 @@
+# Standard Imports
+import logging
+
 # Third-Party Imports
 from flask import Blueprint, request, jsonify
 from sqlalchemy import select
@@ -10,6 +13,8 @@ from src.utils.Authentication import Authentication
 groups_blueprint = Blueprint('groups', __name__)
 auth = Authentication()
 
+# Module-level logging inherited from 'main'
+logger = logging.getLogger('main.user_routes')
 
 @groups_blueprint.route('', methods=['GET', 'POST', 'OUT', 'DELETE'])
 def manage_groups():
@@ -23,6 +28,9 @@ def manage_groups():
     """
     # GET: Get all available groups
     if request.method == 'GET':
+        
+        logger.info("Fetching all available groups")
+        
         try:
             with SessionLocal() as session:
 
@@ -45,6 +53,8 @@ def manage_groups():
     
     # POST: Create a group
     elif request.method == 'POST':
+        
+        logger.info("Attempting to create a group...")
         
         data = request.json
         
@@ -90,6 +100,8 @@ def manage_groups():
     # (optional)
     elif request.method == 'PUT':
         
+        logger.info("Attempting to update group info...")
+        
         data = request.json
     
         try: 
@@ -132,6 +144,8 @@ def manage_groups():
     # DELETE: Delete a group based on a group name
     elif request.method == 'DELETE':
         
+        logging.info("Attempting to delete a group...")
+        
         data = request.json
         group_name = data.get('group_name', False)
         
@@ -159,6 +173,8 @@ def get_group_info(group_id: int):
     """
     Get the name and description of a group
     """
+    logger.info(f"Fetching group information for group ID {group_id}")
+    
     try:
         with SessionLocal() as session:
             
@@ -231,7 +247,9 @@ def manage_users_in_group(group_id: int, user_id: int):
     """
     
     if request.method == 'POST':
-        
+
+        logger.info(f"Attempting to add user ID {user_id} to group ID {group_id}.")
+
         try: 
             
             with SessionLocal() as session:
@@ -255,12 +273,16 @@ def manage_users_in_group(group_id: int, user_id: int):
         
         except Exception as e:
             session.rollback()
+            logger.error(f"Adding user {user_id} to group {group_id} \
+                failed - {str(e)}")
             return jsonify({"error": str(e)}), 500
 
         finally:
             session.close()
             
     elif request.method == 'DELETE':
+        
+        logger.info(f"Attempting to delete user ID {user_id} from group ID {group_id}.")
         
         try:
             with SessionLocal() as session:
@@ -287,5 +309,7 @@ def manage_users_in_group(group_id: int, user_id: int):
             return jsonify({"message": "User removed from the group!"}), 200
     
         except Exception as e:
+            logger.error(f"Deleting user {user_id} fropm group {group_id} \
+                failed - {str(e)}")
             return jsonify({"status": "failed", "message": str(e)}), 500
     

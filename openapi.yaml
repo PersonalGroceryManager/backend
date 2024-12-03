@@ -620,6 +620,9 @@ paths:
         '404':
           description: No group with given group ID found
           $ref: '#/components/responses/NotFoundError'
+        '409':
+          description: Receipt with the order ID already exists in the group
+          $ref: '#/components/responses/ResourceAlreadyExists'
         '500':
           $ref: '#/components/responses/InternalServerError'
       

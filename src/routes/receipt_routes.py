@@ -1,4 +1,5 @@
 # Standard Imports
+import logging
 from datetime import datetime as dt
 from typing import Tuple, Dict, List
 from werkzeug.utils import secure_filename
@@ -16,9 +17,14 @@ from src.routes.group_routes import groups_blueprint
 
 receipt_blueprint = Blueprint('receipts', __name__)
 
+# Module-level logging inherited from 'main'
+logger = logging.getLogger('main.receipt_routes')
+
 # Nest group-related operations under 'groups/<group_id>/receipts'
 @groups_blueprint.route('<int:group_id>/receipts', methods=['GET'])
 def get_receipts_in_group(group_id: int):
+    
+    logger.info(f"Attempting to fetch receipts of group with ID {group_id}.")
     
     try:
         with SessionLocal() as session:
@@ -51,6 +57,8 @@ def get_receipts_in_group(group_id: int):
 
 @groups_blueprint.route('/<int:group_id>/receipts', methods=['POST'])
 def add_receipt_to_group(group_id: int):
+    
+    logger.info(f"Attempting to add receipt to group with ID {group_id}.")
     
     try:
         
@@ -85,6 +93,20 @@ def add_receipt_to_group(group_id: int):
         # Not to be confused - receipt is the SainsburysReceipt object defined
         # in receipt_reader folder, whereas receipt_for_db is a database entry
         receipt = SainsburysReceipt(file)
+        
+        # Ensure the receipt is new - return Resource Already Exists error when
+        # a receipt with the same order ID is found in the specified group
+        with SessionLocal() as session:
+            
+            receipt_exists_in_group = session.query(Receipt)\
+                .filter(Receipt.order_id==receipt.order_id,
+                        Receipt.group_id==group_id)\
+                .one_or_none()
+                
+            if receipt_exists_in_group:
+                return jsonify({"message": 
+                    f"Receipt with order ID {receipt.order_id} already\
+                        exists in group with ID: {group_id}"}), 409
         
         # Add receipt to database
         receipt_for_db = Receipt(order_id=receipt.order_id,
@@ -129,9 +151,10 @@ def add_receipt_to_group(group_id: int):
 
 @receipt_blueprint.route('/<int:receipt_id>/items', methods=['GET'])
 def get_receipt_items(receipt_id: int):
+    
+    logger.info(f"Attempting to fetch receipt items with receipt ID {receipt_id}.")
         
     try:
-        logger.debug(f"Fetching item data for receipt ID: {receipt_id}")
         
         with SessionLocal() as session:
             
@@ -153,7 +176,7 @@ def get_receipt_items(receipt_id: int):
                         "price": item.price}
                        for item in items]
 
-            logger.debug(f"Gathered receipt data to send.")
+            logger.info(f"Successfully gathered receipt item data to send.")
 
         return jsonify(results), 200
 
@@ -169,6 +192,9 @@ def create_user_item_associations(receipt_id: int, user_id: int):
     """
     Create new entry in the user quantity table given the user and receipt ID.
     """
+    logger.info(f"Attempting to create new association between user \
+        (user ID = {user_id}) and receipt (receipt ID = {receipt_id})")
+    
     try:
         # Data type validation
         if not isinstance(receipt_id, int):
@@ -233,6 +259,8 @@ def update_user_item_associations():
             {'user_id': 1, 'item_id': 2, 'unit': 1.0},
         ]
     """
+    logger.info(f"Attempting to create new association between user and items.")
+
     try:
         
         data = request.json
@@ -325,6 +353,9 @@ def update_user_item_associations():
 
 @receipt_blueprint.route('/user-items/<int:receipt_id>', methods=['GET'])
 def get_user_item_associations(receipt_id: int):
+    
+    logger.info(f"Attempting to fetch user-item associations from receipt ID \
+        {receipt_id}")
     
     try:
         with SessionLocal() as session:
