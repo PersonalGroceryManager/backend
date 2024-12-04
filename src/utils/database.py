@@ -7,18 +7,30 @@ Dependencies: models.py
 """
 # Standard Imports
 import os
+import logging
+import time
 from contextlib import contextmanager
 from pathlib import Path
 
 # Third-Party Imports
 from sqlalchemy import create_engine, MetaData
 from sqlalchemy.orm import sessionmaker
+from MySQLdb._exceptions import OperationalError
 from dotenv import load_dotenv
 
 # Project-Specific Imports
 from src.utils.models import Base
 
+
+# Load environmental variables
 load_dotenv()
+
+# Number of retries and delay in seconds between retries
+RETRY_LIMIT = 3
+RETRY_DELAY = 2
+
+# Initialize module-level logger
+logger = logging.getLogger('main.db')
 
 # Set database URL based on MODE environmental variable
 mode = os.getenv('MODE', 'development')  # default to 'development'
@@ -32,8 +44,9 @@ else:
     raise ValueError(f"Invalid MODE: {mode}")
 
 print(f"Running in {mode} mode!")
+
 # Create Engine
-engine = create_engine(DATABASE_URL)
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 
 # Session object for database transaction sessions
 @contextmanager
@@ -47,17 +60,42 @@ def SessionLocal():
     """
     session_blueprint = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     session = session_blueprint()
+    attempt = 0
     
-    try:
-        yield session
-        session.commit()
+    while attempt < RETRY_LIMIT:
+        session = session_blueprint()
         
-    except Exception as e:
-        session.rollback()
-        raise e 
-    
-    finally:
-        session.close()
+        try:
+            # Yield session to the calling code
+            yield session
+            
+            # Commit the transaction
+            session.commit()
+            break
+        
+        # Catch database connection errors. This must be raised by children
+        # try/catch statements
+        except OperationalError as e:
+            session.rollback()
+            attempt += 1
+            if attempt >= RETRY_LIMIT:
+                msg = f"""Database operation faiiled after 
+                      {RETRY_LIMIT} retries: {e}"""
+                logger.critical(msg)
+                raise Exception(msg)
+            
+            logger.critical((f"Retrying session operation due to "
+                             f"disconnection..." 
+                             f"(Attempt {attempt}/{RETRY_LIMIT})"))
+            time.sleep(RETRY_DELAY)
+        
+        # Rollback and propagate other errors
+        except Exception as e:
+            session.rollback()
+            raise e 
+        
+        finally:
+            session.close()
 
 # Create tables (IF NOT EXISTS)
 Base.metadata.create_all(bind=engine)

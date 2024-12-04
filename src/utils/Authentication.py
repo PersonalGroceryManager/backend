@@ -1,10 +1,18 @@
+# Standard Imports
+import logging
+
 # Third-Party Imports
 from flask import session, jsonify
 from passlib.context import CryptContext
+from sqlalchemy.exc import OperationalError
 
 # Project-Specific Imports
 from src.utils.database import SessionLocal
 from src.utils.models import User
+
+
+# Module-level logging
+logger = logging.getLogger('app.auth')
 
 
 class Authentication():
@@ -71,6 +79,11 @@ class Authentication():
                 # Return none for invalid credentials
                 return None
 
+        except OperationalError as e:
+            logger.error((f"Operational Error occured. This is usually caused by "
+                        f"database connection pool. {str(e)}"))
+            raise e
+    
         except Exception as e:
             print(str(e))
             return None
