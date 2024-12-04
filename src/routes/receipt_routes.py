@@ -7,6 +7,7 @@ from werkzeug.utils import secure_filename
 # Third-Party Imports
 from sqlalchemy import select, insert, update, desc
 from flask import Blueprint, request, jsonify
+from sqlalchemy.exc import OperationalError
 
 # Project-Specific Imports
 from src.utils.database import SessionLocal
@@ -105,8 +106,8 @@ def add_receipt_to_group(group_id: int):
                 
             if receipt_exists_in_group:
                 return jsonify({"message": 
-                    f"Receipt with order ID {receipt.order_id} already\
-                        exists in group with ID: {group_id}"}), 409
+                    f"Receipt with order ID {receipt.order_id} already "
+                    f"exists in group with ID: {group_id}"}), 409
         
         # Add receipt to database
         receipt_for_db = Receipt(order_id=receipt.order_id,
@@ -152,7 +153,8 @@ def add_receipt_to_group(group_id: int):
 @receipt_blueprint.route('/<int:receipt_id>/items', methods=['GET'])
 def get_receipt_items(receipt_id: int):
     
-    logger.info(f"Attempting to fetch receipt items with receipt ID {receipt_id}.")
+    logger.info(f"Attempting to fetch receipt items with receipt ID "
+                f"{receipt_id}.")
         
     try:
         
@@ -192,20 +194,20 @@ def create_user_item_associations(receipt_id: int, user_id: int):
     """
     Create new entry in the user quantity table given the user and receipt ID.
     """
-    logger.info(f"Attempting to create new association between user \
-        (user ID = {user_id}) and receipt (receipt ID = {receipt_id})")
+    logger.info((f"Attempting to create new association between user (user ID "
+                 f"= {user_id}) and receipt (receipt ID = {receipt_id})"))
     
     try:
         # Data type validation
         if not isinstance(receipt_id, int):
-            msg = f"Receipt ID is not of type {int} with \
-                its content being {receipt_id}"
+            msg = f"""Receipt ID is not of type {int} with 
+                  its content being {receipt_id}"""
             logger.error(msg)
             return jsonify({"error": "Internal Server Error", 
                             "message": msg}), 500
         if not isinstance(user_id, int):
-            msg = f"User ID is not of type {int} with \
-                its content being {user_id}"
+            msg = f"""User ID is not of type {int} with its content being 
+                  {user_id}"""
             return jsonify({"error": "Internal Server Error", 
                             "message": msg}), 500
             
@@ -220,7 +222,7 @@ def create_user_item_associations(receipt_id: int, user_id: int):
         # Verify that receipt exists
         with SessionLocal() as session:
             receipt = session.execute(select(Receipt.receipt_id)
-                                      .where(Receipt.receipt_id == receipt_id))
+                                      .where(Receipt.receipt_id == receipt_id))  # Here
             if not receipt:
                 return jsonify({"error": "Not Found",
                                 "message": "No receipt with this ID exists"}),\
@@ -244,9 +246,14 @@ def create_user_item_associations(receipt_id: int, user_id: int):
 
         return jsonify({"message": "User added to this receipt"}), 201
     
+    except OperationalError as e:
+        logger.error((f"Operational Error occured. This is usually caused by "
+                      f"database connection pool. {str(e)}"))
+        raise e
+    
     except Exception as e:
         logger.error(e)
-        return jsonify({"error": "Internal Server Error", "message": e}), 500
+        return jsonify({"error": "Internal Server Error", "message": str(e)}), 500
 
 
 @receipt_blueprint.route('/user-items', methods=['PUT'])
@@ -259,15 +266,16 @@ def update_user_item_associations():
             {'user_id': 1, 'item_id': 2, 'unit': 1.0},
         ]
     """
-    logger.info(f"Attempting to create new association between user and items.")
+    logger.info(f"Attempting to update association between user and items.")
 
     try:
         
         data = request.json
-        
+        print(data)
         # Ensure received data is a list
         if not isinstance(data, list):
-            msg = f"Data is not of type list, but of type {type(data)}, with the content being {data}"
+            msg = (f"Data is not of type list, but of type {type(data)}, with " 
+                   f"the content being {data}")
             logger.error(msg)
             return jsonify({"error": "Internal Server Error", 
                             "message": msg}), 500
@@ -277,7 +285,8 @@ def update_user_item_associations():
         
             # Ensure each content is a dictionary
             if not isinstance(obj, dict):
-                msg = f"Content within data is not of type dict, but of type {type(data)}, with the content being {data}"
+                msg = f"""Content within data is not of type dict, but of type 
+                      {type(data)}, with the content being {data}"""
                 logger.error(msg)
                 return jsonify({"error": "Internal Server Error", 
                                 "message": msg}), 500
@@ -299,7 +308,8 @@ def update_user_item_associations():
                                 "message": msg}), 500
                 
             if not isinstance(obj["item_id"], int):
-                msg = f"receipt_id must be an integer. Received {obj['receipt_id']}"
+                msg = f"""receipt_id must be an integer. 
+                      Received {obj['receipt_id']}"""
                 logger.error(msg)
                 return jsonify({"error": "Internal Server Error", 
                                 "message": msg}), 500
@@ -354,8 +364,9 @@ def update_user_item_associations():
 @receipt_blueprint.route('/user-items/<int:receipt_id>', methods=['GET'])
 def get_user_item_associations(receipt_id: int):
     
-    logger.info(f"Attempting to fetch user-item associations from receipt ID \
-        {receipt_id}")
+    logger.info((
+        f"Attempting to fetch user-item associations from receipt "
+        f"ID {receipt_id}"))
     
     try:
         with SessionLocal() as session:

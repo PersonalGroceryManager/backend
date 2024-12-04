@@ -6,6 +6,7 @@ from passlib.context import CryptContext
 # Third party imports
 from sqlalchemy import select, update, insert
 from sqlalchemy.sql import exists
+from MySQLdb._exceptions import OperationalError
 from flask import Blueprint, request, jsonify, session, redirect, url_for
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 
@@ -47,8 +48,9 @@ def register_user():
         if (not username) or (not password) or (not email):
             return jsonify({
                 "error": "Bad Request",
-                "message": "Please provide all required information: \
-                    username, password and email",
+                "message": 
+                    """Please provide all required information: username, 
+                    password and email""",
             }), 400
 
         with SessionLocal() as session:
@@ -103,8 +105,8 @@ def delete_user():
 
             # Return 404 Not found is user does not exist            
             if not user:
-                logger.error(f"User cannot be deleted since a user with ID \
-                    {user_id} cannot be found")
+                logger.error(f"""User cannot be deleted since a user with ID 
+                             {user_id} cannot be found""")
                 return jsonify({"Error": "Not Found", 
                                 "message": "User does not exists!"}), 404
             
@@ -142,8 +144,8 @@ def login():
     # Send the user_id to the frontend to user
     if user_id:
         
-        logger.info(f"User ID {user_id} authenticated for login.\
-                    Generating JWT token...")
+        logger.info((f"User ID {user_id} authenticated for login. "
+                     f"Generating JWT token..."))
         
         # Generate JWT and pass as access token
         access_token = create_access_token(identity=user_id)
@@ -248,7 +250,10 @@ def get_groups_joined_by_user():
     try:
         
         user_id = get_jwt_identity()
-        logger.info(f"Attempting to fetch groups joined by authorized user with ID {user_id}.")
+        logger.info((
+            f"Attempting to fetch groups joined by the authorized user "
+            f"with ID {user_id}."
+        ))
         
         with SessionLocal() as session:
             groups_joined_by_user = session.query(Group).join(
@@ -291,8 +296,9 @@ def get_user_costs():
         
         # Validate that user_id is an integer
         if not isinstance(user_id, int):
-            msg = f"User ID is not an int, but is of type {user_id}, \
-                with content user_id={user_id}"
+            msg = f"""User ID is not an int, but is of type {user_id},
+            with content user_id={user_id}"""
+            logger.critical("Provided user ID is a not an integer.")
             return jsonify({"Error": "Not Found", "message": msg}), 400
         
         with SessionLocal() as session:
@@ -340,14 +346,17 @@ def update_user_costs():
             {"user_id:: 2, "receipt_id": 2, "cost":  9.10}
         ]
     """
-    logger.info("Updating user costs...")
+    logger.info("Attempting to updating user costs...")
     
     try:
         data = request.json
-        
+        print(data)
         # Check that data is a list
         if not isinstance(data, list):
-            return jsonify({"status": "failed"}), 400
+            msg = "Input data is not a list"
+            logger.error(msg)
+            return jsonify({"status": "failed",
+                            "message": f"{msg}"}), 400
 
         # Validate each entry in the list
         for obj in data:
@@ -372,7 +381,8 @@ def update_user_costs():
                 return jsonify({"status": "failed", "message": msg}), 400
 
             if not isinstance(obj["receipt_id"], int):
-                msg = f"receipt_id must be an integer. Received {obj['receipt_id']}"
+                msg = f"""receipt_id must be an integer. 
+                      Received {obj['receipt_id']}"""
                 logger.info(msg)
                 return jsonify({"status": "failed", "message": msg}), 400
 
@@ -400,7 +410,10 @@ def update_user_costs():
                 if not existing_entry:
                     # This table is not an ORM table so must use traditional
                     # query-based syntax
-                    stmt = UserSpending.insert().values(user_id=user_id, receipt_id=receipt_id, cost=cost)
+                    stmt = UserSpending.insert()\
+                        .values(user_id=user_id, 
+                                receipt_id=receipt_id, 
+                                cost=cost)
                 
                 # If an entry exists, just update the values
                 else:
