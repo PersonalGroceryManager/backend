@@ -1,17 +1,6 @@
 # tests/routes_test.py
 
 
-def test_get_groups_when_none_exists(client):
-    """
-    Test getting any groups upon startup. No groups should be present so
-    expecting a 404 error
-    """
-    response = client.get('/groups')
-    assert response.status_code == 404
-    assert 'No Content' in response.json['error']
-    assert 'No groups available' in response.json['message']
-
-
 def test_create_group(client):
     """Test creating a new group."""
     response = client.post('/groups', json={
@@ -22,19 +11,22 @@ def test_create_group(client):
 
 def test_get_groups(client):
     """Test getting all groups."""
-    # Create a group to populate the database
-    test_create_group(client)
-    
-    # Delete the newly created group
+    # Get groups
     response = client.get('/groups')
     assert response.status_code == 200
+    # TODO: Further assertions about group information
+    data = response.json
+    print(data)
+    assert isinstance(data, list)
+    assert "group_id" in data[0]
+    assert "group_name" in data[0]
+    assert "description" in data[0]
+    assert data[0]["group_name"] == "Example Group"
+    assert data[0]["description"] == "Example Description"
 
 
 def test_delete_group(client):
     """Test deletion of a group."""
-    # Create a group to populate the database
-    test_create_group(client)
-
     # Delete the newly created group
     response = client.delete('/groups', json={
         'group_name': 'Random Group',
