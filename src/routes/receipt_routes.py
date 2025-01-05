@@ -150,6 +150,38 @@ def add_receipt_to_group(group_id: int):
                         "message": str(e)}), 500
 
 
+@receipt_blueprint.route('/<int:receipt_id>', methods=['DELETE'])
+def delete_receipt(receipt_id: int):
+    
+    logger.info(f"Attempting to delete receipt with ID {receipt_id}.")
+    
+    try:
+        
+        with SessionLocal() as session:
+            
+            # Query for receipts with this receipt ID
+            receipt = session.query(Receipt).filter(Receipt.receipt_id==receipt_id).one_or_none()
+            
+            # Raise 404 Not found error if no receipt is found
+            # Technically it can include more than one receipt with the receipt
+            # ID but it should be impossible since receipt ID is PK
+            if not receipt:
+                return jsonify({
+                    "error": "Not found",
+                    "message": "No receipts found with this ID"
+                }), 404
+                
+            session.delete(receipt)
+            logger.info(f"Receipt ID {receipt_id} deleted!")
+        
+            return jsonify(), 202
+        
+    except Exception as e:
+        logger.error(str(e))
+        return jsonify({"error": "Internal Server Error", 
+                        "message": str(e)}), 500
+
+
 @receipt_blueprint.route('/<int:receipt_id>/items', methods=['GET'])
 def get_receipt_items(receipt_id: int):
     
