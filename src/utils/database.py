@@ -59,7 +59,6 @@ def SessionLocal():
             user = session.query(User).filter_by(User.user_id=user_id).first()
     """
     session_blueprint = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    session = session_blueprint()
     attempt = 0
     
     while attempt < RETRY_LIMIT:
