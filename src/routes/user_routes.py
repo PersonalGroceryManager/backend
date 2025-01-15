@@ -386,6 +386,15 @@ def update_user_costs():
                 logger.info(msg)
                 return jsonify({"status": "failed", "message": msg}), 400
 
+            # Try to convert string to float
+            if isinstance(obj["cost"], str):
+                try:
+                    obj["cost"] = float(obj["cost"])
+                except ValueError:
+                    msg = f"cost must be a positive number. Received {obj['cost']}"
+                    logger.info(msg)
+                    return jsonify({"status": "failed", "message": msg}), 400
+
             if not isinstance(obj["cost"], (float, int)) or obj["cost"] < 0:
                 msg = f"cost must be a positive number. Received {obj['cost']}"
                 logger.info(msg)
