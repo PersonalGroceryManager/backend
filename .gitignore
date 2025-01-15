@@ -64,3 +64,6 @@ ehthumbs.db
 
 # Environment Variables
 .env
+
+# SQLite Database
+*.db
