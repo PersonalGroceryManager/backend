@@ -220,71 +220,60 @@ def get_receipt_items(receipt_id: int):
                         "message": str(e)}), 500
     
 
-@receipt_blueprint.route('<int:receipt_id>/users/<int:user_id>', 
-                         methods=['POST'])
+@receipt_blueprint.route('<int:receipt_id>/users/<int:user_id>', methods=['POST'])
 def create_user_item_associations(receipt_id: int, user_id: int):
     """
     Create new entry in the user quantity table given the user and receipt ID.
     """
-    logger.info((f"Attempting to create new association between user (user ID "
-                 f"= {user_id}) and receipt (receipt ID = {receipt_id})"))
-    
+    logger.info(f"Attempting to create new association between user (user ID = {user_id}) and receipt (receipt ID = {receipt_id})")
+
     try:
         # Data type validation
-        if not isinstance(receipt_id, int):
-            msg = f"""Receipt ID is not of type {int} with 
-                  its content being {receipt_id}"""
+        if not isinstance(receipt_id, int) or not isinstance(user_id, int):
+            msg = f"Invalid data types: receipt_id={receipt_id}, user_id={user_id}"
             logger.error(msg)
-            return jsonify({"error": "Internal Server Error", 
-                            "message": msg}), 500
-        if not isinstance(user_id, int):
-            msg = f"""User ID is not of type {int} with its content being 
-                  {user_id}"""
-            return jsonify({"error": "Internal Server Error", 
-                            "message": msg}), 500
-            
-        # Verify that user exists
+            return jsonify({"error": "Bad Request", "message": msg}), 400
+
+        # Single database session for all operations
         with SessionLocal() as session:
+            # Verify that user exists
             user = session.scalar(select(User).where(User.user_id == user_id))
             if not user:
-                return jsonify({"error": "Not Found",
-                                "message": "No user with this ID exists"}),\
-                                    404
-        
-        # Verify that receipt exists
-        with SessionLocal() as session:
-            receipt = session.execute(select(Receipt.receipt_id)
-                                      .where(Receipt.receipt_id == receipt_id))  # Here
+                return jsonify({"error": "Not Found", "message": "No user with this ID exists"}), 404
+
+            # Verify that receipt exists
+            receipt = session.scalar(select(Receipt).where(Receipt.receipt_id == receipt_id))
             if not receipt:
-                return jsonify({"error": "Not Found",
-                                "message": "No receipt with this ID exists"}),\
-                                    404
-        
-        with SessionLocal() as session:
-            
-            # Create new entries to link the new user to all items in receipt
-            items: List[Item] = session.query(Item)\
-                .filter(Item.receipt_id==receipt_id).all()
-            
-            for item in items:
-                stmt = insert(UserItems).values(
-                    user_id=user_id,
-                    item_id=item.item_id,
-                    unit=0,
-                )
-                session.execute(stmt)
-            session.commit()
-            logger.info(f"Added user ID {user_id} to receipt ID {receipt_id}")
+                return jsonify({"error": "Not Found", "message": "No receipt with this ID exists"}), 404
+
+            # Retrieve all items associated with the receipt
+            items: List[Item] = session.query(Item).filter(Item.receipt_id == receipt_id).all()
+
+            # Check for existing user-item associations
+            existing_item_ids = {
+                assoc.item_id for assoc in session.query(UserItems.c.item_id).filter(UserItems.c.user_id == user_id).all()
+            }
+
+            # Prepare bulk insert for new associations
+            new_associations = [
+                {"user_id": user_id, "item_id": item.item_id, "unit": 0}
+                for item in items if item.item_id not in existing_item_ids
+            ]
+            if new_associations:
+                session.execute(insert(UserItems).values(new_associations))
+                session.commit()
+                logger.info(f"Added user ID {user_id} to receipt ID {receipt_id}")
+            else:
+                logger.info(f"No new items to associate for user ID {user_id} and receipt ID {receipt_id}")
 
         return jsonify({"message": "User added to this receipt"}), 201
-    
+
     except OperationalError as e:
-        logger.error((f"Operational Error occured. This is usually caused by "
-                      f"database connection pool. {str(e)}"))
-        raise e
-    
+        logger.error(f"Operational Error occurred: {str(e)}")
+        return jsonify({"error": "Internal Server Error", "message": "Database operation failed"}), 500
+
     except Exception as e:
-        logger.error(e)
+        logger.error(f"Unexpected error: {str(e)}")
         return jsonify({"error": "Internal Server Error", "message": str(e)}), 500
 
 
