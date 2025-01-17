@@ -307,10 +307,10 @@ def get_user_costs():
             # Perform an inner join and select the required fields
             results = session.query(Receipt.receipt_id,
                                     Receipt.slot_time,
-                                    UserSpending.c.cost)\
+                                    UserSpending.cost)\
             .join(UserSpending, 
-                  UserSpending.c.receipt_id == Receipt.receipt_id)\
-            .filter(UserSpending.c.user_id == user_id)\
+                  UserSpending.receipt_id == Receipt.receipt_id)\
+            .filter(UserSpending.user_id == user_id)\
             .all()
                 
             # Return error 404 if results are no results are returned
@@ -419,19 +419,14 @@ def update_user_costs():
                 if not existing_entry:
                     # This table is not an ORM table so must use traditional
                     # query-based syntax
-                    stmt = UserSpending.insert()\
-                        .values(user_id=user_id, 
-                                receipt_id=receipt_id, 
-                                cost=cost)
+                    user_spending = UserSpending(user_id=user_id, 
+                                                 receipt_id=receipt_id, 
+                                                 cost=cost)
+                    session.add(user_spending)
                 
                 # If an entry exists, just update the values
                 else:
-                    stmt = update(UserSpending).where(
-                            (UserSpending.c.user_id==user_id) &
-                            (UserSpending.c.receipt_id==receipt_id))\
-                                .values(cost=cost)
-                    print(stmt)
-                session.execute(stmt)
+                    existing_entry.cost = cost
             session.commit()
 
         # Must have empty content

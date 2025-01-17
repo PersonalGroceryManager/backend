@@ -35,14 +35,15 @@ UserItems = Table(
     Column('unit', Integer, nullable=True)
 )
 
-# Link each user to the costs he/she spent on each receipt. 
-UserSpending = Table(
-    'user_spending',
-    Base.metadata,
-    Column('user_id', Integer, ForeignKey('users.user_id', ondelete='CASCADE'), primary_key=True),
-    Column('receipt_id', Integer, ForeignKey('receipts.receipt_id', ondelete='CASCADE'), primary_key=True),
-    Column('cost', Float, nullable=True)
-)
+class UserSpending(Base):
+    __tablename__ = "user_spending"
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.user_id", ondelete="CASCADE"), primary_key=True)
+    receipt_id: Mapped[int] = mapped_column(ForeignKey("receipts.receipt_id", ondelete="CASCADE"), primary_key=True)
+    cost: Mapped[float] = mapped_column(Float, nullable=True)
+
+    # Relationships to User and Receipt
+    user: Mapped["User"] = relationship("User", back_populates="spending")
+    receipt: Mapped["Receipt"] = relationship("Receipt", back_populates="spending")
 
 # Data Tables -----------------------------------------------------------------
 class Group(Base):
@@ -99,6 +100,8 @@ class User(Base):
     groups: Mapped[List[Group]] = relationship("Group", secondary=UserGroups, back_populates="users")
     # A user can have multiple items
     items: Mapped[List[Item]] = relationship("Item", secondary=UserItems, back_populates="users")
+    # A user can have multiple spendings across receipts
+    spending: Mapped[List["UserSpending"]] = relationship("UserSpending", cascade="all, delete-orphan", back_populates="user")
     
     # ----- Methods -----
     def __repr__(self) -> str:
@@ -136,7 +139,9 @@ class Receipt(Base):
     # Bi-directional relationship - plural 'items' as a receipt can contain multiple items
     items: Mapped[List[Item]] = relationship("Item", back_populates="receipt", cascade="all, delete-orphan")
     group: Mapped[Group] = relationship("Group", back_populates="receipts")
-    
+    # Each receipt is linked to the a list of spendings in UserSpending
+    spending: Mapped[List["UserSpending"]] = relationship("UserSpending", cascade="all, delete-orphan", back_populates="receipt")
+
     # ----- Methods -----
     def __repr__(self):
         return f"Receipt ID: {self.receipt_id!r}, delivered at {self.slot_time!r}, paid GBP{self.price!r} with card no. {self.payment_card!r}"
@@ -167,6 +172,6 @@ class Item(Base):
     
     # ----- Relationships -----
     # One-to-many - an item only belong to one receipt
-    receipt: Mapped[User] = relationship("Receipt", back_populates="items")
+    receipt: Mapped[Receipt] = relationship("Receipt", back_populates="items")
     # Many-to-many - An item can belong to multiple users
     users: Mapped[User] = relationship("User", secondary=UserItems, back_populates="items")
