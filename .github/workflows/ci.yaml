@@ -7,7 +7,7 @@ on:
       - main
       - test
   pull_request:
-    branches: 
+    branches:
       - main
       - test
 
@@ -28,7 +28,7 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-    
+
       - name: Set up Python environment
         uses: actions/setup-python@v5
         with:
@@ -43,7 +43,8 @@ jobs:
       - name: Run tests
         # Define environmental variables from repo secrets
         env:
-            MODE: testing
-            DATABASE_URL_TEST: ${{ secrets.DATABASE_URL_TEST }}
+          MODE: testing
+          DATABASE_URL_TEST: ${{ secrets.DATABASE_URL_TEST }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
 
         run: pytest tests/
