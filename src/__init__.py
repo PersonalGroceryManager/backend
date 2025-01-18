@@ -1,4 +1,4 @@
-# Standard Imports
+### Standard Imports
 import os
 
 # Third-Party Imports
@@ -17,7 +17,7 @@ def create_app():
     
     # Enable Cross-Origin Resource Sharing for all routes
     # To-do: Change this to frontend domain only
-    CORS(app)
+    CORS(app, resources={r"/*": {"origins": "*"}}, headers=["Content-Type", "Authorization"], methods=["GET", "POST", "PUT", "DELETE"])
     
     app.register_blueprint(groups_blueprint,  url_prefix='/groups')
     app.register_blueprint(users_blueprint,   url_prefix='/users')
