@@ -73,7 +73,7 @@ def SessionLocal():
         
         # Catch database connection errors. This must be raised by children
         # try/catch statements
-        except OperationalError as e:
+        except Exception as e:
             session.rollback()
             attempt += 1
             if attempt >= RETRY_LIMIT:
@@ -86,11 +86,6 @@ def SessionLocal():
                              f"disconnection..." 
                              f"(Attempt {attempt}/{RETRY_LIMIT})"))
             time.sleep(RETRY_DELAY)
-        
-        # Rollback and propagate other errors
-        except Exception as e:
-            session.rollback()
-            raise e 
         
         finally:
             session.close()
