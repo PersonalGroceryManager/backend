@@ -6,7 +6,6 @@ from passlib.context import CryptContext
 # Third party imports
 from sqlalchemy import select, update, insert
 from sqlalchemy.sql import exists
-from MySQLdb._exceptions import OperationalError
 from flask import Blueprint, request, jsonify, session, redirect, url_for
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 

@@ -15,7 +15,6 @@ from pathlib import Path
 # Third-Party Imports
 from sqlalchemy import create_engine, MetaData
 from sqlalchemy.orm import sessionmaker
-from MySQLdb._exceptions import OperationalError
 from dotenv import load_dotenv
 
 # Project-Specific Imports
