@@ -124,7 +124,7 @@ class SainsburysReceipt():
         # The order starts after the line "Delivery summary" and ends after "Order summary". 
         # Only retain whatever is in between.
         for index, line in enumerate(self._content):
-            if line.startswith("Delivery summary"):
+            if line.startswith("Delivery summary") or line.startswith("Groceries"):
                 start_index = index
             elif line.startswith("Order summary"):
                 end_index = index
@@ -203,8 +203,33 @@ class SainsburysReceipt():
                     weight = float(amount[:-2])  # Strip the 'kg' characters
                     quantity = None
                 else:
+                    # Some text may leak into "amount" if the brand name is not
+                    # capitalized, such as "innocent". We strip any text from
+                    # amount and add it back to the name
+                    cleaned_amount = ""
+                    leftover_name  = ""
+                    
+                    # Loop across characters in amount
+                    for idx, char in enumerate(amount):
+                        
+                        # Loop until we find a non-digit. All initial digits 
+                        # will be assigned to amount, whereas all other 
+                        # characters are leftover names
+                        if not str.isdigit(char):
+                            cleaned_amount = amount[:idx]
+                            leftover_name = amount[idx:]    
+                            break
+
+                    # Since first character of "name" is currently capitalized,
+                    # it makes sense to add a space             
+                    name = leftover_name + " " + name
+                    
+                    # Default weight to none - TODO: Try to find weight info
+                    # within "name"
                     weight = None
-                    quantity = int(amount)             # Type conversion here to prevent performing `int(None)``
+                    
+                    # Safe type conversion 
+                    quantity = int(cleaned_amount) if cleaned_amount else 0
 
                 # Append to each list
                 quantities.append(quantity)            # Quantity stored as integers
