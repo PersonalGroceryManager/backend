@@ -229,7 +229,7 @@ class SainsburysReceipt():
                     weight = None
                     
                     # Safe type conversion 
-                    quantity = int(cleaned_amount) if cleaned_amount else amount
+                    quantity = int(cleaned_amount) if cleaned_amount else int(amount)
 
                 # Append to each list
                 quantities.append(quantity)            # Quantity stored as integers
