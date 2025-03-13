@@ -7,7 +7,8 @@ from passlib.context import CryptContext
 from sqlalchemy import select, update, insert
 from sqlalchemy.sql import exists
 from flask import Blueprint, request, jsonify, session, redirect, url_for
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
+from datetime import timedelta
 
 # Project-Specific Imports
 from src.utils.database import SessionLocal
@@ -147,9 +148,11 @@ def login():
                      f"Generating JWT token..."))
         
         # Generate JWT and pass as access token
-        access_token = create_access_token(identity=user_id)
+        access_token = create_access_token(identity=user_id, fresh=True, expires_delta=timedelta(hours=1))
+        refresh_token = create_refresh_token(identity=user_id)
         return jsonify({"message": "Login successful!", 
                         "access_token": access_token,
+                        "refresh_token": refresh_token,
                         "user_id": user_id}), 200
     else:
         logger.warning(f"Login failed as user is unauthorized.")
@@ -161,6 +164,25 @@ def login():
 def logout():
     session.pop('user_id', None)
     return redirect(url_for(login))
+
+
+@users_blueprint.route("/verify-token", methods=["POST"])
+@jwt_required()
+def verify_token():
+    # get_jwt_identity decodes with the secret key and return 401 if
+    # unauthorized
+    identity = get_jwt_identity()
+    return jsonify(logged_in_as=identity), 200
+
+@users_blueprint.route("/refresh", methods=["POST"])
+@jwt_required(refresh=True)
+def refresh():
+    print("Obtained request for refresh")
+    identity = get_jwt_identity()  # Get user from refresh token
+    print("Refresh success!")
+    new_access_token = create_access_token(identity=identity, expires_delta=timedelta(hours=1))
+    return jsonify({"message": "Token refreshed!", 
+                    "access_token": new_access_token}), 200
 
         
 @users_blueprint.route("", methods=['GET'])
@@ -295,8 +317,10 @@ def get_user_costs():
         
         # Validate that user_id is an integer
         if not isinstance(user_id, int):
-            msg = f"""User ID is not an int, but is of type {user_id},
-            with content user_id={user_id}"""
+            msg = (
+                f"User ID is not an int, but is of type {user_id},"
+                f"with content user_id={user_id}"
+            )
             logger.critical("Provided user ID is a not an integer.")
             return jsonify({"Error": "Not Found", "message": msg}), 400
         
